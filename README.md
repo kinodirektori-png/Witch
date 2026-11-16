@@ -1,5 +1,7 @@
 # Witch
 
+[![Unity CI](https://github.com/kinodirektori-png/Witch/actions/workflows/unity-ci.yml/badge.svg)](https://github.com/kinodirektori-png/Witch/actions/workflows/unity-ci.yml)
+
 A 2D educational mobile game (Unity 2022.3 LTS, iOS) where a young witch harvests everyday natural
 ingredients (lemons, salt, minerals), combines them on her desk and in the cauldron, and discovers the
 real chemistry behind the "magic": scientific names, chemical formulas and reactions.
@@ -21,8 +23,18 @@ real chemistry behind the "magic": scientific names, chemical formulas and react
 | `Assets/Prefabs` | Prefabs |
 | `Assets/Scenes` | Scenes (`MainLab`) |
 
-## Conventions
+## Roadmap
 
-- PascalCase for classes and public members, camelCase for private fields.
-- Small, single-purpose components (e.g. dragging is separate from reaction checking).
-- Work is tracked in GitHub Issues; one PR per issue.
+| Milestone | Goal | Target |
+| --- | --- | --- |
+| [M1: Core loop prototype](https://github.com/kinodirektori-png/Witch/milestone/1?closed=1) ✅ | Drag, brew, reaction feedback, test scene | Done |
+| [M2: Recipe book & HUD](https://github.com/kinodirektori-png/Witch/milestone/2) | Project skeleton, CI, recipe book, HUD, two-ingredient reactions | Dec 2026 |
+| [M3: Harvesting & sourcing](https://github.com/kinodirektori-png/Witch/milestone/3) | Gather ingredients from nature, save system | Jan 2027 |
+| [M4: iOS vertical slice](https://github.com/kinodirektori-png/Witch/milestone/4) | Polished slice on TestFlight | Feb 2027 |
+| [M5: Polish, accessibility & kid-safety](https://github.com/kinodirektori-png/Witch/milestone/5) | Audio, accessibility, privacy review | Mar 2027 |
+
+Details, board setup and cadence: [docs/project-management.md](docs/project-management.md).
+
+## Contributing
+
+Work is tracked in GitHub Issues (one PR per issue, targeting `main`). See [CONTRIBUTING.md](CONTRIBUTING.md) for branching, the Definition of Done, labels and code conventions.

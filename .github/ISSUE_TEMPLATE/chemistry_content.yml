@@ -1,0 +1,49 @@
+name: Chemistry content
+description: Propose a new ingredient, recipe or reaction
+labels: ["chemistry"]
+body:
+  - type: markdown
+    attributes:
+      value: Every fact we teach kids must be correct and safe. Please fill in sources so a second person can check it.
+  - type: input
+    id: name
+    attributes:
+      label: Common and technical name
+      placeholder: Baking soda / Sodium bicarbonate
+    validations:
+      required: true
+  - type: input
+    id: formula
+    attributes:
+      label: Formula or balanced equation
+      placeholder: 3 NaHCO3 + C6H8O7 -> Na3C6H5O7 + 3 CO2 + 3 H2O
+    validations:
+      required: true
+  - type: input
+    id: source
+    attributes:
+      label: Natural or everyday source
+      placeholder: Nahcolite mineral; kitchen cupboard
+    validations:
+      required: true
+  - type: textarea
+    id: explanation
+    attributes:
+      label: Kid-friendly explanation (1-2 sentences, ages 8-12)
+    validations:
+      required: true
+  - type: input
+    id: reference
+    attributes:
+      label: Reference link
+      description: Textbook, PubChem, Wikipedia or similar
+    validations:
+      required: true
+  - type: checkboxes
+    id: safety
+    attributes:
+      label: Safety review
+      options:
+        - label: Safe to try at home with household items, OR the game will show an "ask an adult / don't try at home" note
+          required: true
+        - label: A second person has checked the formula and facts

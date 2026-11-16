@@ -1,0 +1,37 @@
+name: Feature
+description: A new mechanic, screen or improvement for the game
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: story
+    attributes:
+      label: User story
+      description: Who wants this, what do they want, and why?
+      placeholder: As a young player, I want ..., so that ...
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      description: Testable checkboxes. The issue is done when every box is ticked.
+      value: |
+        - [ ] 
+        - [ ] 
+    validations:
+      required: true
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Priority
+      options:
+        - "P0: critical (blocks the current milestone)"
+        - "P1: high"
+        - "P2: normal"
+    validations:
+      required: true
+  - type: textarea
+    id: notes
+    attributes:
+      label: Notes, mockups and Unity setup
+      description: Scripts/folders involved, Inspector setup, sketches, links.
