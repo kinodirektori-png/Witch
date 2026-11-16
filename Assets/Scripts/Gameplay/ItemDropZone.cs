@@ -13,8 +13,19 @@ namespace Witch.Gameplay
     [RequireComponent(typeof(RectTransform))]
     public class ItemDropZone : MonoBehaviour, IDropHandler
     {
-        [Tooltip("Parent accepted items to this zone and centre them. Turn off if a receiver moves or consumes them.")]
-        [SerializeField] private bool parentAcceptedItems = true;
+        /// <summary>What happens to an item after this zone accepts it.</summary>
+        public enum AcceptedItemBehaviour
+        {
+            /// <summary>Parent the item to the zone (or Item Container) and centre it, e.g. a desk slot.</summary>
+            ParentToZone,
+            /// <summary>Leave the item where it was dropped. Use when a receiver moves or consumes it.</summary>
+            LeaveWhereDropped,
+            /// <summary>Send the item back to where it was picked up, e.g. a reusable ingredient on a shelf.</summary>
+            ReturnToStart
+        }
+
+        [Tooltip("ParentToZone: snap into this zone. LeaveWhereDropped: a receiver handles it (e.g. consumes it). ReturnToStart: go back to the shelf.")]
+        [SerializeField] private AcceptedItemBehaviour acceptedItemBehaviour = AcceptedItemBehaviour.ParentToZone;
 
         [Tooltip("Optional container for accepted items. Defaults to this zone's RectTransform.")]
         [SerializeField] private RectTransform itemContainer;
@@ -56,7 +67,14 @@ namespace Witch.Gameplay
 
             // The receiver may already have consumed (disabled/destroyed) the item.
             bool itemStillActive = droppedObject != null && droppedObject.activeInHierarchy;
-            draggable.AcceptDrop(parentAcceptedItems && itemStillActive ? itemContainer : null);
+            bool parentToZone = acceptedItemBehaviour == AcceptedItemBehaviour.ParentToZone && itemStillActive;
+            draggable.AcceptDrop(parentToZone ? itemContainer : null);
+
+            if (acceptedItemBehaviour == AcceptedItemBehaviour.ReturnToStart && itemStillActive)
+            {
+                draggable.SnapBack();
+            }
+
             onItemAccepted.Invoke(droppedObject);
         }
 
