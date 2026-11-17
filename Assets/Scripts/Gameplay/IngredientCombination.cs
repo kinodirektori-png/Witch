@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Runtime.CompilerServices;
 using System.Text;
 using Witch.Data;
 
@@ -12,26 +13,34 @@ namespace Witch.Gameplay
     /// </summary>
     public readonly struct IngredientCombination : IEquatable<IngredientCombination>
     {
-        // Instance IDs of the ingredients, sorted so that order never matters.
+        // Session-local key per ingredient asset, sorted so that order never matters.
+        // Keys come from KeyRegistry (reference identity) because Object.GetInstanceID() is a compile error in Unity 6.
         private readonly int[] sortedIds;
+        private readonly string[] names;
         private readonly int hash;
 
         public IngredientCombination(IEnumerable<RecipeData> ingredients)
         {
-            var ids = new List<int>();
+            var entries = new List<KeyValuePair<int, string>>();
             if (ingredients != null)
             {
                 foreach (RecipeData ingredient in ingredients)
                 {
                     if (ingredient != null)
                     {
-                        ids.Add(ingredient.GetInstanceID());
+                        entries.Add(new KeyValuePair<int, string>(KeyRegistry.GetKey(ingredient), ingredient.name));
                     }
                 }
             }
 
-            ids.Sort();
-            sortedIds = ids.ToArray();
+            entries.Sort((a, b) => a.Key.CompareTo(b.Key));
+            sortedIds = new int[entries.Count];
+            names = new string[entries.Count];
+            for (int i = 0; i < entries.Count; i++)
+            {
+                sortedIds[i] = entries[i].Key;
+                names[i] = entries[i].Value;
+            }
 
             // Hash is computed once because the struct is immutable and used as a dictionary key.
             unchecked
@@ -85,17 +94,44 @@ namespace Witch.Gameplay
             }
 
             var builder = new StringBuilder();
-            foreach (int id in sortedIds)
+            foreach (string ingredientName in names)
             {
                 if (builder.Length > 0)
                 {
                     builder.Append(" + ");
                 }
 
-                builder.Append('#').Append(id);
+                builder.Append(ingredientName);
             }
 
             return builder.ToString();
+        }
+
+        /// <summary>
+        /// Hands out a stable int per ingredient asset (compared by reference) for the current session.
+        /// The weak table does not keep assets alive, so unloaded assets are not leaked.
+        /// </summary>
+        private static class KeyRegistry
+        {
+            private sealed class Key
+            {
+                public readonly int Value;
+
+                public Key(int value)
+                {
+                    Value = value;
+                }
+            }
+
+            private static readonly ConditionalWeakTable<RecipeData, Key> Keys =
+                new ConditionalWeakTable<RecipeData, Key>();
+
+            private static int nextKey;
+
+            public static int GetKey(RecipeData ingredient)
+            {
+                return Keys.GetValue(ingredient, _ => new Key(++nextKey)).Value;
+            }
         }
     }
 }

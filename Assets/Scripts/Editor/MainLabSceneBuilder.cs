@@ -226,12 +226,12 @@ namespace Witch.EditorTools
             TextMeshProUGUI nameLabel = CreateText("Name", image.rectTransform, recipe.commonName, 38, FontStyles.Bold);
             Anchor(nameLabel.rectTransform, new Vector2(0.5f, 0.5f), new Vector2(0f, 30f), new Vector2(230f, 110f));
             nameLabel.color = new Color(0.15f, 0.1f, 0.2f);
-            nameLabel.enableWordWrapping = true;
+            nameLabel.textWrappingMode = TextWrappingModes.Normal;
 
             TextMeshProUGUI sourceLabel = CreateText("Source", image.rectTransform, recipe.biologicalSource, 22, FontStyles.Normal);
             Anchor(sourceLabel.rectTransform, new Vector2(0.5f, 0.5f), new Vector2(0f, -60f), new Vector2(220f, 80f));
             sourceLabel.color = new Color(0.15f, 0.1f, 0.2f, 0.8f);
-            sourceLabel.enableWordWrapping = true;
+            sourceLabel.textWrappingMode = TextWrappingModes.Normal;
 
             image.gameObject.AddComponent<DraggableItem>();
             var ingredient = image.gameObject.AddComponent<IngredientItem>();
