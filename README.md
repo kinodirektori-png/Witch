@@ -2,14 +2,14 @@
 
 [![Unity CI](https://github.com/kinodirektori-png/Witch/actions/workflows/unity-ci.yml/badge.svg)](https://github.com/kinodirektori-png/Witch/actions/workflows/unity-ci.yml)
 
-A 2D educational mobile game (Unity 2022.3 LTS, iOS) where a young witch harvests everyday natural
+A 2D educational mobile game (Unity 6, iOS) where a young witch harvests everyday natural
 ingredients (lemons, salt, minerals), combines them on her desk and in the cauldron, and discovers the
 real chemistry behind the "magic": scientific names, chemical formulas and reactions.
 
 ## Quick start
 
-1. Install Unity **2022.3.62f2** through Unity Hub (add the iOS Build Support module if you build for iPhone).
-   Any 2022.3 LTS patch also works; Hub just asks to switch versions.
+1. Install Unity **6000.6.9f1** (Unity 6) through Unity Hub (add the iOS Build Support module if you build for iPhone).
+   A newer Unity 6 patch also works; Unity upgrades the project when it opens.
 1. In Unity Hub, choose **Add > Add project from disk** and pick the cloned repo folder (the one that
    contains `Assets/`, `Packages/` and `ProjectSettings/`), then open it. The first import takes a few minutes.
 2. Run **Witch > Build MainLab Test Scene** from the menu bar. If prompted, import TMP Essentials and run it again.

@@ -20,7 +20,7 @@ Avoid them. If PR B truly depends on unmerged PR A, say so in both PR descriptio
 An issue is done when:
 
 - [ ] Every acceptance criterion is ticked
-- [ ] Code compiles in Unity 2022.3 LTS without new warnings and CI is green
+- [ ] Code compiles in Unity 6 (6000.6) without new warnings and CI is green
 - [ ] Tests cover new logic (EditMode for pure logic, PlayMode for interactions)
 - [ ] Inspector/scene setup steps are in the PR description, or the scene builder is updated
 - [ ] Chemistry facts are checked against a reference and match `docs/chemistry-content.md`
