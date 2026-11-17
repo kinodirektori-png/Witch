@@ -8,7 +8,10 @@ real chemistry behind the "magic": scientific names, chemical formulas and react
 
 ## Quick start
 
-1. Open the project in Unity 2022.3 LTS.
+1. Install Unity **2022.3.62f2** through Unity Hub (add the iOS Build Support module if you build for iPhone).
+   Any 2022.3 LTS patch also works; Hub just asks to switch versions.
+1. In Unity Hub, choose **Add > Add project from disk** and pick the cloned repo folder (the one that
+   contains `Assets/`, `Packages/` and `ProjectSettings/`), then open it. The first import takes a few minutes.
 2. Run **Witch > Build MainLab Test Scene** from the menu bar. If prompted, import TMP Essentials and run it again.
 3. Set the Game view to a portrait resolution (e.g. 1080x1920), press Play, and drag the requested ingredient into the cauldron.
 
