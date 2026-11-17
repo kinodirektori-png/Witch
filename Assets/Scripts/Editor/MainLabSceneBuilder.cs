@@ -37,6 +37,12 @@ namespace Witch.EditorTools
             public string Formula;
             public string Source;
             public Color Color;
+
+            /// <summary>Asset names of the ingredients that combine into this recipe. Null for a basic ingredient.</summary>
+            public string[] Ingredients;
+
+            /// <summary>Basic ingredients get a draggable item on the shelf; combination results don't.</summary>
+            public bool OnShelf => Ingredients == null || Ingredients.Length == 0;
         }
 
         // Real substances kids can find around them; formulas are accurate.
@@ -56,6 +62,14 @@ namespace Witch.EditorTools
             {
                 AssetName = "BakingSoda", CommonName = "Baking Soda", TechnicalName = "Sodium Bicarbonate",
                 Formula = "NaHCO3", Source = "Nahcolite mineral / Mineral springs", Color = new Color(0.62f, 0.85f, 1f),
+            },
+            // Multi-ingredient sample: 3 NaHCO3 + C6H8O7 -> Na3C6H5O7 + 3 CO2 + 3 H2O. The fizz kids see is the CO2.
+            // Drop Citric Acid once and Baking Soda three times, in any order.
+            new SampleRecipe
+            {
+                AssetName = "FizzyBubbles", CommonName = "Fizzy Bubbles", TechnicalName = "Carbon Dioxide",
+                Formula = "CO2", Source = "Made when baking soda meets citric acid", Color = new Color(0.8f, 0.95f, 1f),
+                Ingredients = new[] { "CitricAcid", "BakingSoda", "BakingSoda", "BakingSoda" },
             },
         };
 
@@ -137,7 +151,8 @@ namespace Witch.EditorTools
             cauldronSo.FindProperty("activeRecipeIndex").intValue = 0;
             cauldronSo.FindProperty("advanceOnSuccess").boolValue = true;
             cauldronSo.FindProperty("loopRecipes").boolValue = true;
-            cauldronSo.FindProperty("consumeIngredientOnSuccess").boolValue = false; // reusable for testing
+            cauldronSo.FindProperty("brewingMode").enumValueIndex = (int)CauldronManager.BrewingMode.ActiveRecipe;
+            cauldronSo.FindProperty("consumeIngredientsOnDrop").boolValue = false; // reusable for testing
             cauldronSo.ApplyModifiedPropertiesWithoutUndo();
 
             // Formula popup
@@ -179,12 +194,15 @@ namespace Witch.EditorTools
             shelf.rectTransform.anchoredPosition = new Vector2(0f, 160f);
             shelf.rectTransform.sizeDelta = new Vector2(-80f, 420f);
 
+            // Only basic ingredients go on the shelf; combination results are brewed, not picked up.
+            var shelfIndices = Enumerable.Range(0, SampleRecipes.Length).Where(i => SampleRecipes[i].OnShelf).ToList();
             float spacing = 320f;
-            float startX = -spacing * (recipes.Count - 1) / 2f;
-            for (int i = 0; i < recipes.Count; i++)
+            float startX = -spacing * (shelfIndices.Count - 1) / 2f;
+            for (int slot = 0; slot < shelfIndices.Count; slot++)
             {
+                int i = shelfIndices[slot];
                 CreateIngredient(shelf.rectTransform, recipes[i], SampleRecipes[i].Color, roundedSprite,
-                    new Vector2(startX + spacing * i, 0f));
+                    new Vector2(startX + spacing * slot, 0f));
             }
 
             TextMeshProUGUI hint = CreateText("Hint", canvasRect, "Drag the right ingredient into the cauldron!", 40, FontStyles.Italic);
@@ -225,6 +243,7 @@ namespace Witch.EditorTools
         {
             EnsureFolder(RecipeFolder);
             var result = new List<RecipeData>();
+            var created = new HashSet<RecipeData>();
 
             foreach (SampleRecipe sample in SampleRecipes)
             {
@@ -238,9 +257,25 @@ namespace Witch.EditorTools
                     recipe.chemicalFormula = sample.Formula;
                     recipe.biologicalSource = sample.Source;
                     AssetDatabase.CreateAsset(recipe, path);
+                    created.Add(recipe);
                 }
 
                 result.Add(recipe);
+            }
+
+            // Second pass: link ingredients now that every asset exists. Existing assets are left as the designer set them.
+            for (int i = 0; i < SampleRecipes.Length; i++)
+            {
+                string[] ingredientNames = SampleRecipes[i].Ingredients;
+                if (ingredientNames == null || !created.Contains(result[i]))
+                {
+                    continue;
+                }
+
+                result[i].ingredients = ingredientNames
+                    .Select(ingredientName => result[System.Array.FindIndex(SampleRecipes, s => s.AssetName == ingredientName)])
+                    .ToList();
+                EditorUtility.SetDirty(result[i]);
             }
 
             AssetDatabase.SaveAssets();

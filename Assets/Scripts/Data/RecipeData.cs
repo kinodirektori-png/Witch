@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Text;
 using UnityEngine;
 
@@ -24,6 +25,15 @@ namespace Witch.Data
 
         [Tooltip("Icon shown in inventory, recipe book and while dragging.")]
         public Sprite itemIcon;
+
+        [Header("Brewing")]
+        [Tooltip("Ingredients that must be in the cauldron together (in any order) to brew this. " +
+                 "Add the same ingredient several times if more is needed, e.g. 3 x Baking Soda. " +
+                 "Leave empty for a basic ingredient: it is brewed by dropping it into the cauldron on its own.")]
+        public List<RecipeData> ingredients = new List<RecipeData>();
+
+        /// <summary>True if this recipe is made by combining other ingredients.</summary>
+        public bool IsCombination => ingredients != null && ingredients.Exists(ingredient => ingredient != null);
 
         /// <summary>
         /// The formula with digits wrapped in TextMeshPro subscript tags, e.g. "H2O" becomes "H&lt;sub&gt;2&lt;/sub&gt;O".
