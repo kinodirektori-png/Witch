@@ -16,7 +16,7 @@ Closes #
 ## Checklist
 - [ ] Base branch is `main` (no stacked PRs unless agreed in the issue)
 - [ ] Scripts are in the right folder and namespace (`Witch.Data`, `Witch.Gameplay`, `Witch.UI`)
-- [ ] Compiles in Unity 2022.3 with no new console warnings
+- [ ] Compiles in Unity 6 (6000.6) with no new console warnings
 - [ ] Tests added/updated, CI green
 - [ ] Chemistry facts checked against a reference (if any)
 - [ ] Labels and milestone match the linked issue
