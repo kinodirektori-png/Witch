@@ -28,6 +28,10 @@ namespace Witch.Gameplay
         [Tooltip("Also show the scientific name under the formula.")]
         [SerializeField] private bool showTechnicalName = true;
 
+        [Tooltip("For recipes made by a reaction, show the balanced equation and the kid-friendly explanation " +
+                 "instead of only the product's formula.")]
+        [SerializeField] private bool showReactionEquation = true;
+
         private ParticleSystem particlesInstance;
 
         private void Awake()
@@ -68,9 +72,19 @@ namespace Witch.Gameplay
         {
             PlayParticles();
 
-            if (formulaPopup != null && recipe != null)
+            if (formulaPopup == null || recipe == null)
             {
-                string subtitle = showTechnicalName ? recipe.technicalName : null;
+                return;
+            }
+
+            string subtitle = showTechnicalName ? recipe.technicalName : null;
+            if (showReactionEquation && recipe.HasReaction)
+            {
+                ReactionData reaction = recipe.reaction;
+                formulaPopup.Show(reaction.RichTextEquation, subtitle, reaction.kidExplanation);
+            }
+            else
+            {
                 formulaPopup.Show(recipe.RichTextFormula, subtitle);
             }
         }

@@ -27,8 +27,9 @@ namespace Witch.Gameplay
             AnyKnownRecipe
         }
 
-        [Tooltip("The recipe dictionary. Each recipe's Ingredients list is its combination (order does not matter); " +
-                 "a recipe without ingredients is brewed by dropping it in on its own. In Active Recipe mode they are brewed in this order.")]
+        [Tooltip("The recipe dictionary. Each recipe's Reaction reactants (or its Ingredients list) is its combination; order " +
+                 "does not matter unless the reaction says so. A recipe without either is brewed by dropping it in on its own. " +
+                 "In Active Recipe mode they are brewed in this order.")]
         [SerializeField] private List<RecipeData> recipes = new List<RecipeData>();
 
         [Tooltip("Active Recipe: only accept ingredients for the current goal. Any Known Recipe: free brewing.")]

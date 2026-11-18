@@ -9,8 +9,12 @@ namespace Witch.Gameplay
     /// Plain C# (not a component) so it can be unit-tested and reused by the recipe book later.
     /// </summary>
     /// <remarks>
-    /// A recipe's combination is its <see cref="RecipeData.ingredients"/> list. A recipe without ingredients is a
-    /// basic ingredient whose combination is just itself, so dropping "Table Salt" in on its own brews Table Salt.
+    /// A recipe's combination is its <see cref="RecipeData.reaction"/>'s reactants (repeated by coefficient) if it has
+    /// one, otherwise its <see cref="RecipeData.ingredients"/> list. A recipe without either is a basic ingredient
+    /// whose combination is just itself, so dropping "Table Salt" in on its own brews Table Salt.
+    /// Most recipes are order-independent; a reaction with <see cref="ReactionData.reactantsInOrder"/> must be
+    /// filled in exactly the listed order. The dictionary key is always the unordered bag, so two recipes can't
+    /// differ only by order.
     /// </remarks>
     public class RecipeDatabase
     {
@@ -58,17 +62,27 @@ namespace Witch.Gameplay
 
         public bool Contains(RecipeData recipe) => recipe != null && recipes.Contains(recipe);
 
-        /// <summary>Looks up the recipe brewed by exactly these ingredients, in any order.</summary>
+        /// <summary>
+        /// Looks up the recipe brewed by exactly these ingredients. Order doesn't matter unless the recipe's
+        /// reaction requires it, in which case <paramref name="ingredients"/> must be in the order they went in.
+        /// </summary>
         public bool TryGetRecipe(IEnumerable<RecipeData> ingredients, out RecipeData recipe)
         {
-            var combination = new IngredientCombination(ingredients);
-            if (combination.IsEmpty)
+            var ingredientList = ingredients != null ? new List<RecipeData>(ingredients) : new List<RecipeData>();
+            var combination = new IngredientCombination(ingredientList);
+            if (combination.IsEmpty || !recipesByCombination.TryGetValue(combination, out recipe))
             {
                 recipe = null;
                 return false;
             }
 
-            return recipesByCombination.TryGetValue(combination, out recipe);
+            if (recipe.RequiresOrder && !IsComplete(ingredientList, recipe))
+            {
+                recipe = null;
+                return false;
+            }
+
+            return true;
         }
 
         /// <summary>
@@ -89,8 +103,9 @@ namespace Witch.Gameplay
         }
 
         /// <summary>
-        /// The ingredients needed to brew <paramref name="recipe"/>: its ingredient list, or the recipe itself
-        /// for a basic ingredient. Never null.
+        /// The ingredients needed to brew <paramref name="recipe"/>: its reaction's reactants (each repeated by its
+        /// coefficient, in listed order), else its ingredient list, else the recipe itself for a basic ingredient.
+        /// Never null.
         /// </summary>
         public static List<RecipeData> GetRequiredIngredients(RecipeData recipe)
         {
@@ -100,7 +115,12 @@ namespace Witch.Gameplay
                 return required;
             }
 
-            if (recipe.ingredients != null)
+            if (recipe.reaction != null)
+            {
+                required.AddRange(recipe.reaction.GetIngredientSequence());
+            }
+
+            if (required.Count == 0 && recipe.ingredients != null)
             {
                 foreach (RecipeData ingredient in recipe.ingredients)
                 {
@@ -121,14 +141,15 @@ namespace Witch.Gameplay
 
         /// <summary>
         /// True if every item in <paramref name="contents"/> is still needed by <paramref name="recipe"/>
-        /// (counting repeats), so the player is on the right track. Empty contents can become any recipe.
+        /// (counting repeats, and in order for ordered reactions), so the player is on the right track.
+        /// Empty contents can become any recipe.
         /// </summary>
         public static bool CanStillBecome(IReadOnlyList<RecipeData> contents, RecipeData recipe)
         {
             return recipe != null && TryGetMissing(contents, recipe, out _);
         }
 
-        /// <summary>True if <paramref name="contents"/> is exactly the recipe's ingredients, in any order.</summary>
+        /// <summary>True if <paramref name="contents"/> is exactly the recipe's ingredients (in order if the recipe requires it).</summary>
         public static bool IsComplete(IReadOnlyList<RecipeData> contents, RecipeData recipe)
         {
             return recipe != null && TryGetMissing(contents, recipe, out List<RecipeData> missing) && missing.Count == 0;
@@ -148,12 +169,33 @@ namespace Witch.Gameplay
         /// <summary>
         /// Removes each item in <paramref name="contents"/> from the recipe's required list (one at a time, so
         /// repeats count). Fails if the contents hold something the recipe doesn't need or too many of something.
+        /// For ordered recipes the contents must match the start of the required sequence.
         /// </summary>
         private static bool TryGetMissing(IReadOnlyList<RecipeData> contents, RecipeData recipe, out List<RecipeData> missing)
         {
             missing = GetRequiredIngredients(recipe);
             if (contents == null)
             {
+                return true;
+            }
+
+            if (recipe.RequiresOrder)
+            {
+                foreach (RecipeData item in contents)
+                {
+                    if (item == null)
+                    {
+                        continue;
+                    }
+
+                    if (missing.Count == 0 || missing[0] != item)
+                    {
+                        return false;
+                    }
+
+                    missing.RemoveAt(0);
+                }
+
                 return true;
             }
 
