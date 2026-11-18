@@ -417,6 +417,7 @@ namespace Witch.EditorTools
 
             // Swap the placeholder shapes for the art in Assets/Art where it exists (issue #41).
             GameArt.ApplyToScene(canvasRect);
+            KitchenLayout.FitTallScreens(canvasRect); // tall phones and foldables, safe area
 
             EnsureFolder("Assets/Scenes");
             EditorSceneManager.SaveScene(scene, ScenePath);
