@@ -45,6 +45,12 @@ namespace Witch.Gameplay
         [SerializeField] private string onText = "Heat: ON";
         [SerializeField] private string offText = "Heat: OFF";
 
+        [Tooltip("Knob image whose sprite turns with the heat. Optional.")]
+        [SerializeField] private Image knobImage;
+
+        [SerializeField] private Sprite knobOnSprite;
+        [SerializeField] private Sprite knobOffSprite;
+
         [Header("Events")]
         [Tooltip("Raised with true when switched on and false when switched off. Hook stove sounds here (#23).")]
         public UnityEvent<bool> onHeatChanged = new UnityEvent<bool>();
@@ -153,6 +159,12 @@ namespace Witch.Gameplay
             if (stateLabel != null)
             {
                 stateLabel.text = IsOn ? onText : offText;
+            }
+
+            Sprite knobSprite = IsOn ? knobOnSprite : knobOffSprite;
+            if (knobImage != null && knobSprite != null)
+            {
+                knobImage.sprite = knobSprite;
             }
         }
     }

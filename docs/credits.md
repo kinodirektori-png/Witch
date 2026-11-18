@@ -7,4 +7,4 @@ Nothing ships until its licence allows commercial use.
 
 | Files | What | Source | Licence |
 | --- | --- | --- | --- |
-| `Assets/Art/Kitchen/*.png` | Kitchen ingredient sprites (lemon, lemon slices, beaker of lemon juice, salt pot, bowls of baking soda, washing soda and flour) | Cut from a placeholder ingredient sheet supplied by the project team | To be confirmed before release. Placeholder, low resolution (about 150 px); replace with 512x512 art (issue #41) |
+| `Assets/Art/**/*.png` | All game art: kitchen items, stove, pot, backdrops, garden plants and crystals, book page, HUD buttons and the witch (see `Assets/Art/README.md`) | Cut from a placeholder concept sheet supplied by the project team | To be confirmed before release. Placeholder, low resolution; replace with final art (issue #41) |

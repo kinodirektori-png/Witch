@@ -128,8 +128,8 @@ namespace Witch.EditorTools
             recipes = ReloadSampleRecipes(); // fresh, persistent references from disk
             ApplySampleConditions(recipes);
             Dictionary<string, KitchenItemData> kitchen = CreateOrLoadKitchenItems(recipes);
-            KitchenArt.Apply(kitchen, recipes); // ingredient sprites from Assets/Art/Kitchen (issue #41)
             List<LoreEntryData> lore = CreateOrLoadLoreEntries(recipes, kitchen);
+            GameArt.ApplyToData(kitchen, recipes, lore); // sprites from Assets/Art (issue #41)
             ParticleSystem particlePrefab = CreateOrLoadParticlePrefab();
 
             Camera camera = CreateCamera();
@@ -407,6 +407,9 @@ namespace Witch.EditorTools
             SetReference(hud, "goalLabel", goalText);
             SetReference(hud, "progressLabel", progressText);
             SetReference(hud, "hintButton", hintButton);
+
+            // Swap the placeholder shapes for the art in Assets/Art where it exists (issue #41).
+            GameArt.ApplyToScene(canvasRect);
 
             EnsureFolder("Assets/Scenes");
             EditorSceneManager.SaveScene(scene, ScenePath);
