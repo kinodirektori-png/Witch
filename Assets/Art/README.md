@@ -41,4 +41,6 @@ file is used where, update the tables at the top of `Assets/Scripts/Editor/GameA
 | `Characters/WitchHappy.png` | Medea idle and cheering after a reaction | 1024 tall |
 | `Characters/WitchThinking.png` | Medea after a wrong try or a hint | 1024 tall |
 
-The backdrops are landscape for now. Final backdrops should be portrait (2048 x 3072) so nothing is cropped.
+The backdrops are landscape for now. Final backdrops should be portrait (2048 x 3072) so nothing is cropped. The
+kitchen backdrop should show only the tiled wall and the counter: the wall shelf, stove and pot are separate pictures,
+and the backdrop is stretched to fill taller phones, so a shelf painted into it would end up behind the HUD.
