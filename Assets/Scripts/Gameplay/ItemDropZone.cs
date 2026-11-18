@@ -9,9 +9,10 @@ namespace Witch.Gameplay
     /// GameObject to receive drops. Every <see cref="IItemDropReceiver"/> on this GameObject is asked whether it
     /// accepts the item; with no receivers the zone accepts everything (e.g. a plain shelf or desk slot).
     /// Items that are rejected snap back to where they were picked up.
+    /// Also takes the item picked up by tapping (<see cref="TapSelection"/>, #21): tap the item, then tap the zone.
     /// </summary>
     [RequireComponent(typeof(RectTransform))]
-    public class ItemDropZone : MonoBehaviour, IDropHandler
+    public class ItemDropZone : MonoBehaviour, IDropHandler, IPointerClickHandler
     {
         /// <summary>What happens to an item after this zone accepts it.</summary>
         public enum AcceptedItemBehaviour
@@ -59,27 +60,78 @@ namespace Witch.Gameplay
                 return;
             }
 
-            if (!IsAccepted(droppedObject))
+            Deliver(droppedObject, draggable);
+        }
+
+        /// <summary>Tap-to-select: a tap on the zone delivers the selected item, as if it had been dropped here.</summary>
+        public void OnPointerClick(PointerEventData eventData)
+        {
+            if (eventData.button != PointerEventData.InputButton.Left || !TapSelection.HasSelection)
             {
-                onItemRejected.Invoke(droppedObject);
                 return;
             }
 
-            // The receiver may already have consumed (disabled/destroyed) the item.
-            bool itemStillActive = droppedObject != null && droppedObject.activeInHierarchy;
-            bool parentToZone = acceptedItemBehaviour == AcceptedItemBehaviour.ParentToZone && itemStillActive;
-            draggable.AcceptDrop(parentToZone ? itemContainer : null);
-
-            if (acceptedItemBehaviour == AcceptedItemBehaviour.ReturnToStart && itemStillActive)
+            TapSelectable selected = TapSelection.Current;
+            if (TryDeliverSelected(selected))
             {
-                draggable.SnapBack();
+                TapSelection.Release(selected);
+            }
+        }
+
+        /// <summary>
+        /// Delivers a tap-selected item. Returns true if the zone accepted it. A refused item stays selected and
+        /// where it is, so the child can try somewhere else.
+        /// </summary>
+        public bool TryDeliverSelected(TapSelectable selected)
+        {
+            if (selected == null || !selected.isActiveAndEnabled)
+            {
+                return false;
             }
 
-            onItemAccepted.Invoke(droppedObject);
+            return Deliver(selected.gameObject, selected.GetComponent<DraggableItem>());
+        }
+
+        private bool Deliver(GameObject item, DraggableItem draggable)
+        {
+            if (!IsAccepted(item))
+            {
+                onItemRejected.Invoke(item);
+                return false;
+            }
+
+            // The receiver may already have consumed (disabled/destroyed) the item.
+            bool itemStillActive = item != null && item.activeInHierarchy;
+            bool parentToZone = acceptedItemBehaviour == AcceptedItemBehaviour.ParentToZone && itemStillActive;
+            if (itemContainer == null)
+            {
+                itemContainer = (RectTransform)transform;
+            }
+
+            if (draggable != null && draggable.IsDragging)
+            {
+                draggable.AcceptDrop(parentToZone ? itemContainer : null);
+
+                if (acceptedItemBehaviour == AcceptedItemBehaviour.ReturnToStart && itemStillActive)
+                {
+                    draggable.SnapBack();
+                }
+            }
+            else if (parentToZone)
+            {
+                // Tapped, not dragged: the item is still in its original place, so move it into the zone directly.
+                var itemRect = (RectTransform)item.transform;
+                itemRect.SetParent(itemContainer, worldPositionStays: false);
+                itemRect.anchoredPosition = Vector2.zero;
+            }
+
+            onItemAccepted.Invoke(item);
+            return true;
         }
 
         private bool IsAccepted(GameObject droppedObject)
         {
+            receivers ??= GetComponents<IItemDropReceiver>();
             if (receivers == null || receivers.Length == 0)
             {
                 return true;

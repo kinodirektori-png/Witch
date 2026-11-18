@@ -272,7 +272,7 @@ namespace Witch.EditorTools
             SetReference(squeeze, "juiceTarget", glass);
 
             TextMeshProUGUI instructions = CreateText("Instructions", canvasRect,
-                "Tap the lemon to squeeze it. Drag things into the pot!", 36, FontStyles.Italic);
+                "Tap the lemon to squeeze it. Drag or tap things into the pot!", 36, FontStyles.Italic);
             Anchor(instructions.rectTransform, BottomCentre, new Vector2(0f, 70f), new Vector2(1000f, 80f));
             instructions.color = new Color(1f, 1f, 1f, 0.8f);
 
@@ -464,6 +464,8 @@ namespace Witch.EditorTools
             captionLabel.fontSizeMax = 20f;
 
             image.gameObject.AddComponent<DraggableItem>();
+            // Tap it, then tap the pot: the same as dragging, for kids who find dragging hard (#21).
+            image.gameObject.AddComponent<TapSelectable>();
 
             var state = image.gameObject.AddComponent<ItemState>();
             var stateSo = new SerializedObject(state);
