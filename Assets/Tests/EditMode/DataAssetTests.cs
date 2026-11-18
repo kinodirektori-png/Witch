@@ -109,6 +109,21 @@ namespace Witch.Tests
         }
 
         [Test]
+        public void EveryHeatedRecipe_HasASafetyNote()
+        {
+            var problems = new List<string>();
+            foreach (RecipeData recipe in LoadAll<RecipeData>())
+            {
+                if (recipe.conditions != null && recipe.conditions.needsHeat && !recipe.HasSafetyNote)
+                {
+                    problems.Add($"{recipe.name}: needs the stove but has no safety note (e.g. \"Only use the stove with an adult.\")");
+                }
+            }
+
+            Assert.IsEmpty(problems, string.Join("\n", problems));
+        }
+
+        [Test]
         public void EveryReaction_IsBalanced_AndHasReactants()
         {
             var problems = new List<string>();

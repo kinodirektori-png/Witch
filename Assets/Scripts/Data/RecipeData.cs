@@ -26,6 +26,11 @@ namespace Witch.Data
         [Tooltip("Icon shown in inventory, recipe book and while dragging.")]
         public Sprite itemIcon;
 
+        [Tooltip("Kid-facing safety line, e.g. \"Only use the stove with an adult.\" Required for anything that needs " +
+                 "heat, and for anything that stings, burns or shouldn't be eaten. Shown in the popup and the book.")]
+        [TextArea(1, 3)]
+        public string safetyNote = "";
+
         [Header("Brewing")]
         [Tooltip("Ingredients that must be in the cauldron together (in any order) to brew this. " +
                  "Add the same ingredient several times if more is needed, e.g. 3 x Baking Soda. " +
@@ -58,6 +63,27 @@ namespace Witch.Data
         }
 
         /// <summary>True if this recipe is made by a <see cref="ReactionData"/> with at least one reactant.</summary>
+        /// <summary>True if the recipe has a safety line to show ("ask an adult", "stings your eyes").</summary>
+        public bool HasSafetyNote => !string.IsNullOrWhiteSpace(safetyNote);
+
+        /// <summary>
+        /// The kid explanation followed by the safety line (if any), for places that show one block of text.
+        /// </summary>
+        public string KidExplanationWithSafety
+        {
+            get
+            {
+                string explanation = KidExplanation;
+                if (!HasSafetyNote)
+                {
+                    return explanation;
+                }
+
+                string safety = $"<b>Safety:</b> {safetyNote}";
+                return string.IsNullOrEmpty(explanation) ? safety : $"{explanation}\n{safety}";
+            }
+        }
+
         public bool HasReaction => reaction != null && reaction.GetIngredientSequence().Count > 0;
 
         /// <summary>True if this recipe is made by combining other ingredients (via a reaction or the Ingredients list).</summary>
@@ -120,6 +146,7 @@ namespace Witch.Data
             technicalName = technicalName?.Trim();
             chemicalFormula = chemicalFormula?.Trim();
             biologicalSource = biologicalSource?.Trim();
+            safetyNote = safetyNote?.Trim();
 
             if (conditions != null)
             {
