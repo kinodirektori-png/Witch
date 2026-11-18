@@ -145,7 +145,7 @@ namespace Witch.EditorTools
             background.raycastTarget = false;
 
             TextMeshProUGUI title = CreateText("Title", canvasRect, "Medea's Kitchen Lab", 80, FontStyles.Bold);
-            Anchor(title.rectTransform, new Vector2(0.5f, 1f), new Vector2(0f, -140f), new Vector2(1000f, 120f));
+            Anchor(title.rectTransform, new Vector2(0.5f, 1f), new Vector2(0f, -140f), new Vector2(700f, 120f));
 
             // ---- Wall shelf: salt jar, baking soda box, flour bag ----
             RectTransform shelf = CreateContainer("Shelf", canvasRect);
@@ -310,6 +310,9 @@ namespace Witch.EditorTools
             Stretch(hintLabel.rectTransform);
             hintLabel.color = new Color(0.25f, 0.15f, 0.3f);
 
+            // ---- Recipe and lore book (button in the HUD, full-screen panel above the kitchen) ----
+            RecipeBookUI book = CreateRecipeBook(canvasRect, hudRect, roundedSprite, circleSprite);
+
             // ---- Formula popup (above everything) ----
             var popupRect = new GameObject("FormulaPopup", typeof(RectTransform)).GetComponent<RectTransform>();
             popupRect.SetParent(canvasRect, false);
@@ -364,6 +367,9 @@ namespace Witch.EditorTools
             var loreBook = pot.gameObject.AddComponent<LoreBook>();
             SetReference(loreBook, "discovery", discovery);
             SetObjectList(loreBook, "entries", lore.Cast<Object>().ToList());
+
+            SetReference(book, "discovery", discovery);
+            SetReference(book, "loreBook", loreBook);
 
             var hud = hudRect.gameObject.AddComponent<GameHUD>();
             SetReference(hud, "cauldron", cauldron);
@@ -444,6 +450,196 @@ namespace Witch.EditorTools
             }
 
             return state;
+        }
+
+        /// <summary>
+        /// Builds the book: a HUD button (top right, with a "new" dot) and a full-screen panel with a close button,
+        /// Recipes/Lore tabs and a touch-scrollable list. Sources are wired by the caller.
+        /// </summary>
+        private static RecipeBookUI CreateRecipeBook(RectTransform canvasRect, RectTransform hudRect, Sprite roundedSprite, Sprite circleSprite)
+        {
+            // HUD button. 150 canvas units is about 50 pt on an iPhone, above the 44 pt minimum.
+            Button openButton = CreateButton("BookButton", hudRect, roundedSprite, "Book", 38,
+                new Color(0.62f, 0.45f, 0.85f), Vector2.zero, new Vector2(150f, 140f), out TextMeshProUGUI openLabel);
+            Anchor((RectTransform)openButton.transform, new Vector2(1f, 1f), new Vector2(-100f, -110f), new Vector2(150f, 140f));
+            openLabel.color = Color.white;
+            GameObject openBadge = CreateBadge(openButton.transform, circleSprite);
+
+            // Full-screen panel: dims the kitchen and blocks taps on it while open.
+            Image backdrop = CreateImage("RecipeBook", canvasRect, null, new Color(0.05f, 0.03f, 0.08f, 0.75f));
+            Stretch(backdrop.rectTransform);
+            backdrop.raycastTarget = true;
+            CanvasGroup panelGroup = backdrop.gameObject.AddComponent<CanvasGroup>();
+            panelGroup.alpha = 0f;
+            panelGroup.interactable = false;
+            panelGroup.blocksRaycasts = false;
+
+            Image page = CreateImage("Page", backdrop.rectTransform, roundedSprite, new Color(0.96f, 0.9f, 0.76f));
+            page.type = Image.Type.Sliced;
+            page.rectTransform.anchorMin = Vector2.zero;
+            page.rectTransform.anchorMax = Vector2.one;
+            page.rectTransform.offsetMin = new Vector2(40f, 80f);
+            page.rectTransform.offsetMax = new Vector2(-40f, -120f);
+
+            TextMeshProUGUI pageTitle = CreateText("Title", page.rectTransform, "Medea's Book", 64, FontStyles.Bold);
+            Anchor(pageTitle.rectTransform, new Vector2(0.5f, 1f), new Vector2(-60f, -90f), new Vector2(700f, 100f));
+            pageTitle.color = new Color(0.3f, 0.15f, 0.35f);
+
+            Button closeButton = CreateButton("CloseButton", page.rectTransform, roundedSprite, "Close", 36,
+                new Color(0.85f, 0.4f, 0.4f), Vector2.zero, new Vector2(170f, 150f), out TextMeshProUGUI closeLabel);
+            Anchor((RectTransform)closeButton.transform, new Vector2(1f, 1f), new Vector2(-105f, -90f), new Vector2(170f, 150f));
+            closeLabel.color = Color.white;
+
+            Button recipesTab = CreateButton("RecipesTab", page.rectTransform, roundedSprite, "Recipes", 40,
+                new Color(1f, 0.85f, 0.45f), Vector2.zero, new Vector2(440f, 120f), out _);
+            Anchor((RectTransform)recipesTab.transform, new Vector2(0.5f, 1f), new Vector2(-235f, -240f), new Vector2(440f, 120f));
+            GameObject recipesBadge = CreateBadge(recipesTab.transform, circleSprite);
+
+            Button loreTab = CreateButton("LoreTab", page.rectTransform, roundedSprite, "Plants & Crystals", 36,
+                new Color(0.75f, 0.68f, 0.6f), Vector2.zero, new Vector2(440f, 120f), out _);
+            Anchor((RectTransform)loreTab.transform, new Vector2(0.5f, 1f), new Vector2(235f, -240f), new Vector2(440f, 120f));
+            GameObject loreBadge = CreateBadge(loreTab.transform, circleSprite);
+
+            // Scroll view: viewport clips with RectMask2D (no stencil), content grows with its entries.
+            var scrollRect = new GameObject("Scroll", typeof(RectTransform)).AddComponent<ScrollRect>();
+            var scrollTransform = (RectTransform)scrollRect.transform;
+            scrollTransform.SetParent(page.rectTransform, false);
+            scrollTransform.anchorMin = Vector2.zero;
+            scrollTransform.anchorMax = Vector2.one;
+            scrollTransform.offsetMin = new Vector2(30f, 30f);
+            scrollTransform.offsetMax = new Vector2(-30f, -320f);
+
+            // A transparent raycast target so a drag anywhere in the list scrolls it.
+            Image scrollHit = scrollRect.gameObject.AddComponent<Image>();
+            scrollHit.color = new Color(1f, 1f, 1f, 0f);
+
+            var viewport = new GameObject("Viewport", typeof(RectTransform), typeof(RectMask2D)).GetComponent<RectTransform>();
+            viewport.SetParent(scrollTransform, false);
+            Stretch(viewport);
+
+            var content = new GameObject("Content", typeof(RectTransform)).GetComponent<RectTransform>();
+            content.SetParent(viewport, false);
+            content.anchorMin = new Vector2(0f, 1f);
+            content.anchorMax = new Vector2(1f, 1f);
+            content.pivot = new Vector2(0.5f, 1f);
+            content.anchoredPosition = Vector2.zero;
+            content.sizeDelta = Vector2.zero;
+            var contentLayout = content.gameObject.AddComponent<VerticalLayoutGroup>();
+            contentLayout.spacing = 24f;
+            contentLayout.padding = new RectOffset(0, 0, 10, 40);
+            contentLayout.childControlWidth = true;
+            contentLayout.childControlHeight = true;
+            contentLayout.childForceExpandWidth = true;
+            contentLayout.childForceExpandHeight = false;
+            var contentFitter = content.gameObject.AddComponent<ContentSizeFitter>();
+            contentFitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+
+            scrollRect.viewport = viewport;
+            scrollRect.content = content;
+            scrollRect.horizontal = false;
+            scrollRect.vertical = true;
+            scrollRect.movementType = ScrollRect.MovementType.Elastic;
+            scrollRect.scrollSensitivity = 30f;
+
+            // Templates live outside Content (inactive) so rebuilding the list never destroys them.
+            TextMeshProUGUI headerTemplate = CreateText("HeaderTemplate", scrollTransform, "Plants", 48, FontStyles.Bold);
+            headerTemplate.alignment = TextAlignmentOptions.MidlineLeft;
+            headerTemplate.color = new Color(0.45f, 0.2f, 0.45f);
+            headerTemplate.gameObject.SetActive(false);
+
+            BookEntryView entryTemplate = CreateBookEntryTemplate(scrollTransform, roundedSprite, circleSprite);
+
+            var book = backdrop.gameObject.AddComponent<RecipeBookUI>();
+            SetReference(book, "panel", panelGroup);
+            SetReference(book, "openButton", openButton);
+            SetReference(book, "closeButton", closeButton);
+            SetReference(book, "openButtonBadge", openBadge);
+            SetReference(book, "recipesTabButton", recipesTab);
+            SetReference(book, "loreTabButton", loreTab);
+            SetReference(book, "recipesTabBadge", recipesBadge);
+            SetReference(book, "loreTabBadge", loreBadge);
+            SetReference(book, "scrollRect", scrollRect);
+            SetReference(book, "content", content);
+            SetReference(book, "entryTemplate", entryTemplate);
+            SetReference(book, "headerTemplate", headerTemplate);
+            return book;
+        }
+
+        /// <summary>One book entry: icon on the left, texts stacked by a VerticalLayoutGroup, optional action button.</summary>
+        private static BookEntryView CreateBookEntryTemplate(RectTransform parent, Sprite roundedSprite, Sprite circleSprite)
+        {
+            Image background = CreateImage("EntryTemplate", parent, roundedSprite, new Color(1f, 0.97f, 0.88f));
+            background.type = Image.Type.Sliced;
+            background.raycastTarget = false; // drags pass through to the ScrollRect
+            var layout = background.gameObject.AddComponent<VerticalLayoutGroup>();
+            layout.padding = new RectOffset(200, 30, 24, 28);
+            layout.spacing = 8f;
+            layout.childControlWidth = true;
+            layout.childControlHeight = true;
+            layout.childForceExpandWidth = true;
+            layout.childForceExpandHeight = false;
+            background.gameObject.AddComponent<LayoutElement>().minHeight = 220f;
+
+            Image icon = CreateImage("Icon", background.rectTransform, circleSprite, Color.white);
+            icon.raycastTarget = false;
+            icon.preserveAspect = true;
+            icon.gameObject.AddComponent<LayoutElement>().ignoreLayout = true;
+            Anchor(icon.rectTransform, new Vector2(0f, 1f), new Vector2(100f, -110f), new Vector2(150f, 150f));
+
+            TextMeshProUGUI title = CreateEntryText("Title", background.rectTransform, 46, FontStyles.Bold, new Color(0.25f, 0.12f, 0.3f));
+            TextMeshProUGUI subtitle = CreateEntryText("Subtitle", background.rectTransform, 32, FontStyles.Normal, new Color(0.35f, 0.25f, 0.4f));
+            TextMeshProUGUI formula = CreateEntryText("Formula", background.rectTransform, 38, FontStyles.Bold, new Color(0.15f, 0.5f, 0.3f));
+            TextMeshProUGUI body = CreateEntryText("Body", background.rectTransform, 30, FontStyles.Normal, new Color(0.2f, 0.15f, 0.2f));
+
+            Button action = CreateButton("ActionButton", background.rectTransform, roundedSprite, "Gather", 34,
+                new Color(0.55f, 0.8f, 0.5f), Vector2.zero, new Vector2(360f, 110f), out TextMeshProUGUI actionLabel);
+            var actionElement = action.gameObject.AddComponent<LayoutElement>();
+            actionElement.preferredHeight = 110f;
+            actionElement.minHeight = 110f;
+            action.gameObject.SetActive(false);
+
+            Image badge = CreateImage("NewBadge", background.rectTransform, roundedSprite, new Color(0.95f, 0.3f, 0.35f));
+            badge.type = Image.Type.Sliced;
+            badge.raycastTarget = false;
+            badge.gameObject.AddComponent<LayoutElement>().ignoreLayout = true;
+            Anchor(badge.rectTransform, new Vector2(1f, 1f), new Vector2(-70f, -36f), new Vector2(110f, 50f));
+            TextMeshProUGUI badgeLabel = CreateText("Label", badge.rectTransform, "NEW", 28, FontStyles.Bold);
+            Stretch(badgeLabel.rectTransform);
+            badge.gameObject.SetActive(false);
+
+            var view = background.gameObject.AddComponent<BookEntryView>();
+            SetReference(view, "icon", icon);
+            SetReference(view, "titleLabel", title);
+            SetReference(view, "subtitleLabel", subtitle);
+            SetReference(view, "formulaLabel", formula);
+            SetReference(view, "bodyLabel", body);
+            SetReference(view, "newBadge", badge.gameObject);
+            SetReference(view, "actionButton", action);
+            SetReference(view, "actionLabel", actionLabel);
+            SetReference(view, "background", background);
+            SetReference(view, "fallbackIcon", circleSprite);
+
+            background.gameObject.SetActive(false);
+            return view;
+        }
+
+        private static TextMeshProUGUI CreateEntryText(string objectName, RectTransform parent, float size, FontStyles style, Color color)
+        {
+            TextMeshProUGUI label = CreateText(objectName, parent, "", size, style);
+            label.alignment = TextAlignmentOptions.TopLeft;
+            label.color = color;
+            label.textWrappingMode = TextWrappingModes.Normal;
+            return label;
+        }
+
+        /// <summary>A small red dot in the top-right corner, hidden until something is new.</summary>
+        private static GameObject CreateBadge(Transform parent, Sprite circleSprite)
+        {
+            Image dot = CreateImage("NewDot", (RectTransform)parent, circleSprite, new Color(0.95f, 0.25f, 0.3f));
+            dot.raycastTarget = false;
+            Anchor(dot.rectTransform, new Vector2(1f, 1f), new Vector2(-10f, -10f), new Vector2(40f, 40f));
+            dot.gameObject.SetActive(false);
+            return dot.gameObject;
         }
 
         private static Button CreateButton(string objectName, RectTransform parent, Sprite sprite, string text, float fontSize,
