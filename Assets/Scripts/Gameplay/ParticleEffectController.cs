@@ -32,7 +32,15 @@ namespace Witch.Gameplay
                  "instead of only the product's formula.")]
         [SerializeField] private bool showReactionEquation = true;
 
+        [Header("Strength")]
+        [Tooltip("Scale the particle burst by how strong the mixture was, so a watery mixture fizzes less.")]
+        [SerializeField] private bool scaleWithConcentration = true;
+
+        [Tooltip("Smallest burst, as a fraction of the prefab's burst, for a very watery mixture.")]
+        [SerializeField, Range(0.05f, 1f)] private float minimumIntensity = 0.25f;
+
         private ParticleSystem particlesInstance;
+        private float baseBurstCount = -1f;
 
         private void Awake()
         {
@@ -70,7 +78,14 @@ namespace Witch.Gameplay
         /// <summary>Plays the effect for a recipe. Public so it can also be triggered from UnityEvents or tests.</summary>
         public void PlayReactionEffect(RecipeData recipe)
         {
-            PlayParticles();
+            bool visibleEffect = recipe == null || recipe.conditions == null || recipe.conditions.effect != ObservableEffect.None;
+            if (visibleEffect)
+            {
+                float intensity = scaleWithConcentration && cauldron != null
+                    ? Mathf.Lerp(minimumIntensity, 1f, cauldron.LastBrewConcentration)
+                    : 1f;
+                PlayParticles(intensity);
+            }
 
             if (formulaPopup == null || recipe == null)
             {
@@ -78,14 +93,14 @@ namespace Witch.Gameplay
             }
 
             string subtitle = showTechnicalName ? recipe.technicalName : null;
+            string explanation = recipe.KidExplanation;
             if (showReactionEquation && recipe.HasReaction)
             {
-                ReactionData reaction = recipe.reaction;
-                formulaPopup.Show(reaction.RichTextEquation, subtitle, reaction.kidExplanation);
+                formulaPopup.Show(recipe.reaction.RichTextEquation, subtitle, explanation);
             }
             else
             {
-                formulaPopup.Show(recipe.RichTextFormula, subtitle);
+                formulaPopup.Show(recipe.RichTextFormula, subtitle, explanation);
             }
         }
 
@@ -94,7 +109,7 @@ namespace Witch.Gameplay
             PlayReactionEffect(recipe);
         }
 
-        private void PlayParticles()
+        private void PlayParticles(float intensity)
         {
             if (reactionParticlesPrefab == null)
             {
@@ -110,9 +125,29 @@ namespace Witch.Gameplay
                 main.stopAction = ParticleSystemStopAction.None;
             }
 
+            ScaleBurst(intensity);
             particlesInstance.transform.SetPositionAndRotation(particleSpawnPoint.position, particleSpawnPoint.rotation);
             particlesInstance.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
             particlesInstance.Play(true);
+        }
+
+        /// <summary>Sets the first burst to <paramref name="intensity"/> x the prefab's burst count.</summary>
+        private void ScaleBurst(float intensity)
+        {
+            ParticleSystem.EmissionModule emission = particlesInstance.emission;
+            if (emission.burstCount == 0)
+            {
+                return;
+            }
+
+            ParticleSystem.Burst burst = emission.GetBurst(0);
+            if (baseBurstCount < 0f)
+            {
+                baseBurstCount = burst.count.constant;
+            }
+
+            burst.count = new ParticleSystem.MinMaxCurve(Mathf.Max(1f, Mathf.Round(baseBurstCount * Mathf.Clamp01(intensity))));
+            emission.SetBurst(0, burst);
         }
     }
 }

@@ -3,6 +3,7 @@ using System.IO;
 using System.Linq;
 using TMPro;
 using UnityEditor;
+using UnityEditor.Events;
 using UnityEditor.SceneManagement;
 using UnityEngine;
 using UnityEngine.EventSystems;
@@ -15,8 +16,9 @@ using Witch.UI;
 namespace Witch.EditorTools
 {
     /// <summary>
-    /// Builds a ready-to-play MainLab test scene: a shelf of draggable ingredients, a cauldron that checks
-    /// reactions, bubbling particles and a formula popup, all wired together with placeholder art.
+    /// Builds a ready-to-play MainLab kitchen: a wall shelf (salt, baking soda, flour), a pot on a stove with a heat
+    /// knob, and a counter (a lemon to squeeze, a glass for the juice, a water jug). Everything is wired together with
+    /// placeholder art: pouring, squeezing, diluting, heating, the HUD, hints, effects and the formula popup.
     /// Menu: Witch > Build MainLab Test Scene.
     /// </summary>
     public static class MainLabSceneBuilder
@@ -25,11 +27,15 @@ namespace Witch.EditorTools
         private const string ScenePath = "Assets/Scenes/MainLab.unity";
         private const string RecipeFolder = "Assets/Data/Recipes";
         private const string ReactionFolder = "Assets/Data/Reactions";
+        private const string KitchenItemFolder = "Assets/Data/KitchenItems";
+        private const string LoreFolder = "Assets/Data/Lore";
         private const string FizzReactionName = "BakingSodaCitricAcid";
+        private const string HeatReactionName = "BakingSodaHeat";
         private const string PrefabFolder = "Assets/Prefabs";
         private const string ParticlePrefabPath = PrefabFolder + "/ReactionBubbles.prefab";
 
         private static readonly Vector2 ReferenceResolution = new Vector2(1080f, 1920f);
+        private static readonly Vector2 BottomCentre = new Vector2(0.5f, 0f);
 
         private struct SampleRecipe
         {
@@ -38,7 +44,6 @@ namespace Witch.EditorTools
             public string TechnicalName;
             public string Formula;
             public string Source;
-            public Color Color;
 
             /// <summary>Asset names of the ingredients that combine into this recipe. Null for a basic ingredient.</summary>
             public string[] Ingredients;
@@ -46,35 +51,50 @@ namespace Witch.EditorTools
             /// <summary>Asset name of the <see cref="ReactionData"/> that makes this recipe. Null if none.</summary>
             public string Reaction;
 
-            /// <summary>Basic ingredients get a draggable item on the shelf; combination results don't.</summary>
-            public bool OnShelf => (Ingredients == null || Ingredients.Length == 0) && string.IsNullOrEmpty(Reaction);
+            /// <summary>Recipes the pot asks for, in order. Basic ingredients are only poured in.</summary>
+            public bool IsGoal => (Ingredients != null && Ingredients.Length > 0) || !string.IsNullOrEmpty(Reaction);
         }
 
-        // Real substances kids can find around them; formulas are accurate.
+        // Real substances found in a home kitchen; formulas are accurate.
         private static readonly SampleRecipe[] SampleRecipes =
         {
             new SampleRecipe
             {
                 AssetName = "TableSalt", CommonName = "Table Salt", TechnicalName = "Sodium Chloride",
-                Formula = "NaCl", Source = "Salt crystals / Sea water", Color = new Color(0.93f, 0.93f, 0.96f),
+                Formula = "NaCl", Source = "Salt crystals / Sea water",
             },
             new SampleRecipe
             {
                 AssetName = "CitricAcid", CommonName = "Citric Acid", TechnicalName = "Citric Acid",
-                Formula = "C6H8O7", Source = "Lemons and other citrus fruits", Color = new Color(1f, 0.86f, 0.25f),
+                Formula = "C6H8O7", Source = "Lemons and other citrus fruits",
             },
             new SampleRecipe
             {
                 AssetName = "BakingSoda", CommonName = "Baking Soda", TechnicalName = "Sodium Bicarbonate",
-                Formula = "NaHCO3", Source = "Nahcolite mineral / Mineral springs", Color = new Color(0.62f, 0.85f, 1f),
+                Formula = "NaHCO3", Source = "Nahcolite mineral / Mineral springs",
             },
-            // Two-ingredient reaction: 3 NaHCO3 + C6H8O7 -> Na3C6H5O7 + 3 CO2 + 3 H2O. The fizz kids see is the CO2.
-            // Drop Citric Acid once and Baking Soda three times, in any order (see CreateOrLoadFizzReaction).
+            new SampleRecipe
+            {
+                AssetName = "Flour", CommonName = "Flour", TechnicalName = "Starch",
+                Formula = "(C6H10O5)n", Source = "Ground wheat grains",
+            },
+            // 3 NaHCO3 + C6H8O7 -> Na3C6H5O7 + 3 CO2 + 3 H2O. Pour baking soda three times and lemon juice once.
             new SampleRecipe
             {
                 AssetName = "FizzyBubbles", CommonName = "Fizzy Bubbles", TechnicalName = "Carbon Dioxide",
-                Formula = "CO2", Source = "Made when baking soda meets citric acid", Color = new Color(0.8f, 0.95f, 1f),
-                Reaction = FizzReactionName,
+                Formula = "CO2", Source = "Made when baking soda meets citric acid", Reaction = FizzReactionName,
+            },
+            // Physical change: salt dissolves once water is poured in.
+            new SampleRecipe
+            {
+                AssetName = "SaltWater", CommonName = "Salt Water", TechnicalName = "Sodium Chloride Solution",
+                Formula = "NaCl(aq)", Source = "Made when salt dissolves in water", Ingredients = new[] { "TableSalt" },
+            },
+            // Thermal reaction: 2 NaHCO3 -> Na2CO3 + H2O + CO2 once the pot is hot.
+            new SampleRecipe
+            {
+                AssetName = "WashingSoda", CommonName = "Washing Soda", TechnicalName = "Sodium Carbonate",
+                Formula = "Na2CO3", Source = "Made when baking soda is heated", Reaction = HeatReactionName,
             },
         };
 
@@ -106,6 +126,9 @@ namespace Witch.EditorTools
             List<RecipeData> recipes = CreateOrLoadSampleRecipes();
             LinkSampleReactions(recipes);
             recipes = ReloadSampleRecipes(); // fresh, persistent references from disk
+            ApplySampleConditions(recipes);
+            Dictionary<string, KitchenItemData> kitchen = CreateOrLoadKitchenItems(recipes);
+            List<LoreEntryData> lore = CreateOrLoadLoreEntries(recipes, kitchen);
             ParticleSystem particlePrefab = CreateOrLoadParticlePrefab();
 
             Camera camera = CreateCamera();
@@ -116,16 +139,142 @@ namespace Witch.EditorTools
             Sprite roundedSprite = AssetDatabase.GetBuiltinExtraResource<Sprite>("UI/Skin/UISprite.psd");
             Sprite circleSprite = AssetDatabase.GetBuiltinExtraResource<Sprite>("UI/Skin/Knob.psd");
 
-            // Background
-            Image background = CreateImage("Background", canvasRect, null, new Color(0.17f, 0.11f, 0.24f));
+            // Kitchen wall
+            Image background = CreateImage("KitchenWall", canvasRect, null, new Color(0.27f, 0.2f, 0.24f));
             Stretch(background.rectTransform);
             background.raycastTarget = false;
 
-            // Title and goal
-            TextMeshProUGUI title = CreateText("Title", canvasRect, "The Witch's Lab", 84, FontStyles.Bold);
+            TextMeshProUGUI title = CreateText("Title", canvasRect, "Medea's Kitchen Lab", 80, FontStyles.Bold);
             Anchor(title.rectTransform, new Vector2(0.5f, 1f), new Vector2(0f, -140f), new Vector2(1000f, 120f));
 
-            // HUD: goal icon + text on the left, hint button on the right, "recipes found" underneath.
+            // ---- Wall shelf: salt jar, baking soda box, flour bag ----
+            RectTransform shelf = CreateContainer("Shelf", canvasRect);
+            Image plank = CreateImage("Plank", shelf, roundedSprite, new Color(0.55f, 0.36f, 0.2f));
+            plank.type = Image.Type.Sliced;
+            plank.raycastTarget = false;
+            Anchor(plank.rectTransform, BottomCentre, new Vector2(0f, 1010f), new Vector2(1000f, 36f));
+
+            var shelfItemSize = new Vector2(230f, 250f);
+            CreateKitchenItem(shelf, "SaltJar", kitchen["SaltJar"], roundedSprite, new Vector2(-330f, 1153f), shelfItemSize);
+            CreateKitchenItem(shelf, "BakingSodaBox", kitchen["BakingSodaBox"], roundedSprite, new Vector2(0f, 1153f), shelfItemSize);
+            CreateKitchenItem(shelf, "FlourBag", kitchen["FlourBag"], roundedSprite, new Vector2(330f, 1153f), shelfItemSize);
+
+            // ---- Stove with heat knob ----
+            Image stove = CreateImage("Stove", canvasRect, roundedSprite, new Color(0.2f, 0.2f, 0.22f));
+            stove.type = Image.Type.Sliced;
+            stove.raycastTarget = false;
+            Anchor(stove.rectTransform, BottomCentre, new Vector2(-150f, 570f), new Vector2(480f, 160f));
+
+            Image burner = CreateImage("BurnerGlow", stove.rectTransform, roundedSprite, new Color(0.35f, 0.35f, 0.38f));
+            burner.type = Image.Type.Sliced;
+            burner.raycastTarget = false;
+            Anchor(burner.rectTransform, new Vector2(0.5f, 1f), new Vector2(0f, -22f), new Vector2(380f, 28f));
+
+            // ---- Pot (the cauldron of the kitchen) ----
+            Image pot = CreateImage("Pot", canvasRect, circleSprite, new Color(0.12f, 0.12f, 0.14f));
+            Anchor(pot.rectTransform, BottomCentre, new Vector2(-150f, 790f), new Vector2(420f, 300f));
+
+            Image liquid = CreateImage("Liquid", pot.rectTransform, circleSprite, new Color(0.25f, 0.22f, 0.2f));
+            Anchor(liquid.rectTransform, new Vector2(0.5f, 1f), new Vector2(0f, -55f), new Vector2(350f, 90f));
+            liquid.raycastTarget = false;
+
+            TextMeshProUGUI potLabel = CreateText("Label", pot.rectTransform, "Pot", 40, FontStyles.Italic);
+            Anchor(potLabel.rectTransform, new Vector2(0.5f, 0.5f), new Vector2(0f, -40f), new Vector2(300f, 60f));
+            potLabel.color = new Color(1f, 1f, 1f, 0.6f);
+
+            Image steam = CreateImage("Steam", pot.rectTransform, circleSprite, new Color(1f, 1f, 1f, 0.35f));
+            Anchor(steam.rectTransform, new Vector2(0.5f, 1f), new Vector2(0f, 60f), new Vector2(260f, 110f));
+            steam.raycastTarget = false;
+            steam.gameObject.SetActive(false);
+
+            var spawnPoint = new GameObject("ParticleSpawnPoint", typeof(RectTransform)).GetComponent<RectTransform>();
+            spawnPoint.SetParent(pot.rectTransform, false);
+            Anchor(spawnPoint, new Vector2(0.5f, 1f), new Vector2(0f, -50f), Vector2.zero);
+
+            var dropZone = pot.gameObject.AddComponent<ItemDropZone>();
+            SetEnum(dropZone, "acceptedItemBehaviour", (int)ItemDropZone.AcceptedItemBehaviour.ReturnToStart);
+
+            var vessel = pot.gameObject.AddComponent<MixingVessel>();
+
+            var cauldron = pot.gameObject.AddComponent<CauldronManager>();
+            List<RecipeData> goals = Enumerable.Range(0, SampleRecipes.Length)
+                .Where(i => SampleRecipes[i].IsGoal)
+                .Select(i => recipes[i])
+                .ToList();
+            var cauldronSo = new SerializedObject(cauldron);
+            SerializedProperty recipeList = cauldronSo.FindProperty("recipes");
+            recipeList.arraySize = goals.Count;
+            for (int i = 0; i < goals.Count; i++)
+            {
+                recipeList.GetArrayElementAtIndex(i).objectReferenceValue = goals[i];
+            }
+
+            cauldronSo.FindProperty("activeRecipeIndex").intValue = 0;
+            cauldronSo.FindProperty("advanceOnSuccess").boolValue = true;
+            cauldronSo.FindProperty("loopRecipes").boolValue = true;
+            cauldronSo.FindProperty("brewingMode").enumValueIndex = (int)CauldronManager.BrewingMode.ActiveRecipe;
+            cauldronSo.FindProperty("consumeIngredientsOnDrop").boolValue = false; // jars stay on the shelf
+            cauldronSo.FindProperty("vessel").objectReferenceValue = vessel;
+            cauldronSo.ApplyModifiedPropertiesWithoutUndo();
+
+            // Strength and temperature next to the pot, so kids can watch dilution and heating.
+            TextMeshProUGUI temperatureText = CreateText("Temperature", canvasRect, "20 °C", 44, FontStyles.Bold);
+            Anchor(temperatureText.rectTransform, BottomCentre, new Vector2(290f, 935f), new Vector2(320f, 64f));
+            temperatureText.color = new Color(1f, 0.75f, 0.55f);
+
+            TextMeshProUGUI strengthText = CreateText("Strength", canvasRect, "Empty", 38, FontStyles.Normal);
+            Anchor(strengthText.rectTransform, BottomCentre, new Vector2(290f, 875f), new Vector2(320f, 56f));
+            strengthText.color = new Color(0.75f, 0.9f, 1f);
+
+            var mixtureVisual = pot.gameObject.AddComponent<MixtureVisual>();
+            SetReference(mixtureVisual, "vessel", vessel);
+            SetReference(mixtureVisual, "liquid", liquid);
+            SetReference(mixtureVisual, "strengthLabel", strengthText);
+            SetReference(mixtureVisual, "temperatureLabel", temperatureText);
+            SetReference(mixtureVisual, "steam", steam.gameObject);
+
+            // Empty-pot button (start again, e.g. after too much water).
+            Button emptyButton = CreateButton("EmptyPotButton", canvasRect, roundedSprite, "Empty pot", 32,
+                new Color(0.75f, 0.7f, 0.85f), new Vector2(290f, 760f), new Vector2(220f, 110f), out _);
+            UnityEventTools.AddPersistentListener(emptyButton.onClick, cauldron.EmptyCauldron);
+
+            // Heat zone with knob. 160 canvas units is above the 44 pt minimum touch target on iPhone.
+            var heatZone = stove.gameObject.AddComponent<HeatZone>();
+            Button knob = CreateButton("HeatKnob", canvasRect, roundedSprite, "Heat: OFF", 34,
+                new Color(0.95f, 0.6f, 0.35f), new Vector2(290f, 590f), new Vector2(220f, 160f), out TextMeshProUGUI knobLabel);
+            var heatSo = new SerializedObject(heatZone);
+            SerializedProperty fixedVessels = heatSo.FindProperty("fixedVessels");
+            fixedVessels.arraySize = 1;
+            fixedVessels.GetArrayElementAtIndex(0).objectReferenceValue = vessel;
+            heatSo.FindProperty("glow").objectReferenceValue = burner;
+            heatSo.FindProperty("stateLabel").objectReferenceValue = knobLabel;
+            heatSo.ApplyModifiedPropertiesWithoutUndo();
+            UnityEventTools.AddPersistentListener(knob.onClick, heatZone.Toggle);
+
+            // ---- Counter: lemon in a bowl, glass for the juice, water jug ----
+            RectTransform counter = CreateContainer("Counter", canvasRect);
+            Image counterTop = CreateImage("CounterTop", counter, null, new Color(0.62f, 0.45f, 0.3f));
+            counterTop.raycastTarget = false;
+            counterTop.rectTransform.anchorMin = Vector2.zero;
+            counterTop.rectTransform.anchorMax = new Vector2(1f, 0f);
+            counterTop.rectTransform.pivot = BottomCentre;
+            counterTop.rectTransform.anchoredPosition = Vector2.zero;
+            counterTop.rectTransform.sizeDelta = new Vector2(0f, 470f);
+
+            var counterItemSize = new Vector2(240f, 240f);
+            ItemState lemon = CreateKitchenItem(counter, "LemonBowl", kitchen["Lemon"], roundedSprite, new Vector2(-330f, 270f), counterItemSize);
+            ItemState glass = CreateKitchenItem(counter, "JuiceGlass", null, roundedSprite, new Vector2(0f, 270f), counterItemSize, "Empty glass");
+            CreateKitchenItem(counter, "WaterJug", kitchen["WaterJug"], roundedSprite, new Vector2(330f, 270f), counterItemSize);
+
+            var squeeze = lemon.gameObject.AddComponent<SqueezeInteraction>();
+            SetReference(squeeze, "juiceTarget", glass);
+
+            TextMeshProUGUI instructions = CreateText("Instructions", canvasRect,
+                "Tap the lemon to squeeze it. Drag things into the pot!", 36, FontStyles.Italic);
+            Anchor(instructions.rectTransform, BottomCentre, new Vector2(0f, 70f), new Vector2(1000f, 80f));
+            instructions.color = new Color(1f, 1f, 1f, 0.8f);
+
+            // ---- HUD (goal, recipes found, hint) ----
             var hudRect = new GameObject("HUD", typeof(RectTransform)).GetComponent<RectTransform>();
             hudRect.SetParent(canvasRect, false);
             Stretch(hudRect);
@@ -136,16 +285,16 @@ namespace Witch.EditorTools
             goalIcon.preserveAspect = true;
 
             TextMeshProUGUI goalText = CreateText("GoalText", hudRect, "Brew: ...", 56, FontStyles.Normal);
-            Anchor(goalText.rectTransform, new Vector2(0.5f, 1f), new Vector2(5f, -270f), new Vector2(650f, 120f));
+            Anchor(goalText.rectTransform, new Vector2(0.5f, 1f), new Vector2(5f, -280f), new Vector2(650f, 150f));
             goalText.alignment = TextAlignmentOptions.MidlineLeft;
             goalText.color = new Color(1f, 0.9f, 0.6f);
             goalText.textWrappingMode = TextWrappingModes.Normal;
             goalText.enableAutoSizing = true;
-            goalText.fontSizeMin = 32f;
+            goalText.fontSizeMin = 30f;
             goalText.fontSizeMax = 56f;
 
             TextMeshProUGUI progressText = CreateText("RecipesFound", hudRect, "Recipes found: 0 / 0", 40, FontStyles.Normal);
-            Anchor(progressText.rectTransform, new Vector2(0.5f, 1f), new Vector2(0f, -370f), new Vector2(900f, 60f));
+            Anchor(progressText.rectTransform, new Vector2(0.5f, 1f), new Vector2(0f, -385f), new Vector2(900f, 60f));
             progressText.color = new Color(1f, 1f, 1f, 0.75f);
 
             // 150 canvas units is about 50 pt on an iPhone, above the 44 pt minimum touch target.
@@ -161,42 +310,7 @@ namespace Witch.EditorTools
             Stretch(hintLabel.rectTransform);
             hintLabel.color = new Color(0.25f, 0.15f, 0.3f);
 
-            // Cauldron
-            Image cauldronImage = CreateImage("Cauldron", canvasRect, circleSprite, new Color(0.12f, 0.12f, 0.14f));
-            Anchor(cauldronImage.rectTransform, new Vector2(0.5f, 0.5f), new Vector2(0f, 120f), new Vector2(460f, 400f));
-
-            Image brew = CreateImage("Brew", cauldronImage.rectTransform, circleSprite, new Color(0.35f, 0.85f, 0.45f));
-            Anchor(brew.rectTransform, new Vector2(0.5f, 1f), new Vector2(0f, -70f), new Vector2(380f, 110f));
-            brew.raycastTarget = false;
-
-            TextMeshProUGUI cauldronLabel = CreateText("Label", cauldronImage.rectTransform, "Cauldron", 40, FontStyles.Italic);
-            Anchor(cauldronLabel.rectTransform, new Vector2(0.5f, 0.5f), new Vector2(0f, -40f), new Vector2(400f, 60f));
-            cauldronLabel.color = new Color(1f, 1f, 1f, 0.6f);
-
-            var spawnPoint = new GameObject("ParticleSpawnPoint", typeof(RectTransform)).GetComponent<RectTransform>();
-            spawnPoint.SetParent(cauldronImage.rectTransform, false);
-            Anchor(spawnPoint, new Vector2(0.5f, 1f), new Vector2(0f, -60f), Vector2.zero);
-
-            var dropZone = cauldronImage.gameObject.AddComponent<ItemDropZone>();
-            SetEnum(dropZone, "acceptedItemBehaviour", (int)ItemDropZone.AcceptedItemBehaviour.ReturnToStart);
-
-            var cauldron = cauldronImage.gameObject.AddComponent<CauldronManager>();
-            var cauldronSo = new SerializedObject(cauldron);
-            SerializedProperty recipeList = cauldronSo.FindProperty("recipes");
-            recipeList.arraySize = recipes.Count;
-            for (int i = 0; i < recipes.Count; i++)
-            {
-                recipeList.GetArrayElementAtIndex(i).objectReferenceValue = recipes[i];
-            }
-
-            cauldronSo.FindProperty("activeRecipeIndex").intValue = 0;
-            cauldronSo.FindProperty("advanceOnSuccess").boolValue = true;
-            cauldronSo.FindProperty("loopRecipes").boolValue = true;
-            cauldronSo.FindProperty("brewingMode").enumValueIndex = (int)CauldronManager.BrewingMode.ActiveRecipe;
-            cauldronSo.FindProperty("consumeIngredientsOnDrop").boolValue = false; // reusable for testing
-            cauldronSo.ApplyModifiedPropertiesWithoutUndo();
-
-            // Formula popup
+            // ---- Formula popup (above everything) ----
             var popupRect = new GameObject("FormulaPopup", typeof(RectTransform)).GetComponent<RectTransform>();
             popupRect.SetParent(canvasRect, false);
             Anchor(popupRect, new Vector2(0.5f, 0.5f), new Vector2(0f, 540f), new Vector2(980f, 440f));
@@ -204,7 +318,7 @@ namespace Witch.EditorTools
             popupRect.GetComponent<CanvasGroup>().alpha = 0f; // hidden until a reaction happens
 
             // Dark backing so long equations and explanations stay readable over the scene.
-            Image popupBacking = CreateImage("Backing", popupRect, roundedSprite, new Color(0.08f, 0.05f, 0.12f, 0.85f));
+            Image popupBacking = CreateImage("Backing", popupRect, roundedSprite, new Color(0.08f, 0.05f, 0.12f, 0.9f));
             popupBacking.type = Image.Type.Sliced;
             popupBacking.raycastTarget = false;
             Stretch(popupBacking.rectTransform);
@@ -226,7 +340,7 @@ namespace Witch.EditorTools
             explanationText.color = new Color(1f, 0.95f, 0.8f);
             explanationText.textWrappingMode = TextWrappingModes.Normal;
             explanationText.enableAutoSizing = true;
-            explanationText.fontSizeMin = 28f;
+            explanationText.fontSizeMin = 26f;
             explanationText.fontSizeMax = 38f;
             explanationText.gameObject.SetActive(false);
 
@@ -234,19 +348,22 @@ namespace Witch.EditorTools
             SetReference(popup, "subtitleLabel", subtitleText);
             SetReference(popup, "explanationLabel", explanationText);
 
-            // Effects controller
-            var effects = cauldronImage.gameObject.AddComponent<ParticleEffectController>();
+            // ---- Wiring: effects, discovery, hints, lore book, HUD ----
+            var effects = pot.gameObject.AddComponent<ParticleEffectController>();
             SetReference(effects, "cauldron", cauldron);
             SetReference(effects, "reactionParticlesPrefab", particlePrefab);
             SetReference(effects, "particleSpawnPoint", spawnPoint);
             SetReference(effects, "formulaPopup", popup);
 
-            // Discovery, hints and HUD
-            var discovery = cauldronImage.gameObject.AddComponent<RecipeDiscovery>();
+            var discovery = pot.gameObject.AddComponent<RecipeDiscovery>();
             SetReference(discovery, "cauldron", cauldron);
 
-            var hintTracker = cauldronImage.gameObject.AddComponent<HintTracker>();
+            var hintTracker = pot.gameObject.AddComponent<HintTracker>();
             SetReference(hintTracker, "cauldron", cauldron);
+
+            var loreBook = pot.gameObject.AddComponent<LoreBook>();
+            SetReference(loreBook, "discovery", discovery);
+            SetObjectList(loreBook, "entries", lore.Cast<Object>().ToList());
 
             var hud = hudRect.gameObject.AddComponent<GameHUD>();
             SetReference(hud, "cauldron", cauldron);
@@ -258,68 +375,102 @@ namespace Witch.EditorTools
             SetReference(hud, "progressLabel", progressText);
             SetReference(hud, "hintButton", hintButton);
 
-            // Shelf with ingredients
-            Image shelf = CreateImage("Shelf", canvasRect, roundedSprite, new Color(0.42f, 0.27f, 0.16f));
-            shelf.type = Image.Type.Sliced;
-            shelf.raycastTarget = false;
-            shelf.rectTransform.anchorMin = new Vector2(0f, 0f);
-            shelf.rectTransform.anchorMax = new Vector2(1f, 0f);
-            shelf.rectTransform.pivot = new Vector2(0.5f, 0f);
-            shelf.rectTransform.anchoredPosition = new Vector2(0f, 160f);
-            shelf.rectTransform.sizeDelta = new Vector2(-80f, 420f);
-
-            // Only basic ingredients go on the shelf; combination results are brewed, not picked up.
-            var shelfIndices = Enumerable.Range(0, SampleRecipes.Length).Where(i => SampleRecipes[i].OnShelf).ToList();
-            float spacing = 320f;
-            float startX = -spacing * (shelfIndices.Count - 1) / 2f;
-            for (int slot = 0; slot < shelfIndices.Count; slot++)
-            {
-                int i = shelfIndices[slot];
-                CreateIngredient(shelf.rectTransform, recipes[i], SampleRecipes[i].Color, roundedSprite,
-                    new Vector2(startX + spacing * slot, 0f));
-            }
-
-            TextMeshProUGUI instructions = CreateText("Instructions", canvasRect, "Drag the right ingredient into the cauldron!", 40, FontStyles.Italic);
-            Anchor(instructions.rectTransform, new Vector2(0.5f, 0f), new Vector2(0f, 90f), new Vector2(1000f, 80f));
-            instructions.color = new Color(1f, 1f, 1f, 0.7f);
-
             EnsureFolder("Assets/Scenes");
             EditorSceneManager.SaveScene(scene, ScenePath);
             AddSceneToBuildSettings(ScenePath);
 
-            Selection.activeGameObject = cauldronImage.gameObject;
-            Debug.Log($"MainLab test scene built at {ScenePath}. Press Play and drag ingredients into the cauldron.");
+            Selection.activeGameObject = pot.gameObject;
+            Debug.Log($"MainLab kitchen built at {ScenePath}. Press Play: squeeze the lemon, pour into the pot, " +
+                      "add water and turn on the heat.");
         }
 
-        private static void CreateIngredient(RectTransform parent, RecipeData recipe, Color color, Sprite sprite, Vector2 position)
+        /// <summary>
+        /// A draggable kitchen item with its <see cref="ItemState"/>, pour feedback and hint glow. Pass null contents
+        /// and an empty name for an empty container (e.g. the juice glass).
+        /// </summary>
+        private static ItemState CreateKitchenItem(RectTransform parent, string objectName, KitchenItemData contents,
+            Sprite sprite, Vector2 position, Vector2 size, string emptyName = "Empty")
         {
-            Image image = CreateImage(recipe.name, parent, sprite, color);
+            Color startColor = contents != null ? contents.placeholderColor : new Color(0.85f, 0.9f, 0.95f, 0.6f);
+            Image image = CreateImage(objectName, parent, sprite, startColor);
             image.type = Image.Type.Sliced;
-            Anchor(image.rectTransform, new Vector2(0.5f, 0.5f), position, new Vector2(240f, 240f));
+            Anchor(image.rectTransform, BottomCentre, position, size);
 
-            TextMeshProUGUI nameLabel = CreateText("Name", image.rectTransform, recipe.commonName, 38, FontStyles.Bold);
-            Anchor(nameLabel.rectTransform, new Vector2(0.5f, 0.5f), new Vector2(0f, 30f), new Vector2(230f, 110f));
+            TextMeshProUGUI nameLabel = CreateText("Name", image.rectTransform, contents != null ? contents.displayName : emptyName, 38, FontStyles.Bold);
+            Anchor(nameLabel.rectTransform, new Vector2(0.5f, 0.5f), new Vector2(0f, 30f), new Vector2(size.x - 10f, 110f));
             nameLabel.color = new Color(0.15f, 0.1f, 0.2f);
             nameLabel.textWrappingMode = TextWrappingModes.Normal;
+            nameLabel.enableAutoSizing = true;
+            nameLabel.fontSizeMin = 24f;
+            nameLabel.fontSizeMax = 38f;
 
-            TextMeshProUGUI sourceLabel = CreateText("Source", image.rectTransform, recipe.biologicalSource, 22, FontStyles.Normal);
-            Anchor(sourceLabel.rectTransform, new Vector2(0.5f, 0.5f), new Vector2(0f, -60f), new Vector2(220f, 80f));
-            sourceLabel.color = new Color(0.15f, 0.1f, 0.2f, 0.8f);
-            sourceLabel.textWrappingMode = TextWrappingModes.Normal;
+            TextMeshProUGUI captionLabel = CreateText("Caption", image.rectTransform, contents != null ? contents.placeDescription : "", 22, FontStyles.Normal);
+            Anchor(captionLabel.rectTransform, new Vector2(0.5f, 0.5f), new Vector2(0f, -65f), new Vector2(size.x - 20f, 80f));
+            captionLabel.color = new Color(0.15f, 0.1f, 0.2f, 0.85f);
+            captionLabel.textWrappingMode = TextWrappingModes.Normal;
 
             image.gameObject.AddComponent<DraggableItem>();
-            var ingredient = image.gameObject.AddComponent<IngredientItem>();
-            SetReference(ingredient, "recipe", recipe);
-            SetReference(ingredient, "iconImage", image);
 
-            // Hint glow: a thick yellow outline that IngredientHighlight switches on and pulses.
-            var glow = image.gameObject.AddComponent<Outline>();
-            glow.effectColor = new Color(1f, 0.9f, 0.2f, 1f);
-            glow.effectDistance = new Vector2(12f, -12f);
-            glow.enabled = false;
+            var state = image.gameObject.AddComponent<ItemState>();
+            var stateSo = new SerializedObject(state);
+            stateSo.FindProperty("startContents").objectReferenceValue = contents;
+            stateSo.FindProperty("emptyName").stringValue = emptyName;
+            stateSo.FindProperty("image").objectReferenceValue = image;
+            stateSo.FindProperty("nameLabel").objectReferenceValue = nameLabel;
+            stateSo.FindProperty("captionLabel").objectReferenceValue = captionLabel;
+            stateSo.ApplyModifiedPropertiesWithoutUndo();
 
-            var highlight = image.gameObject.AddComponent<IngredientHighlight>();
-            SetReference(highlight, "glow", glow);
+            image.gameObject.AddComponent<PourSource>();
+
+            bool isWater = contents != null && contents.isWater;
+            if (!isWater)
+            {
+                // Ingredients (and the glass, once it holds juice) can be found by the hint button.
+                var ingredient = image.gameObject.AddComponent<IngredientItem>();
+                var ingredientSo = new SerializedObject(ingredient);
+                ingredientSo.FindProperty("recipe").objectReferenceValue = contents != null ? contents.substance : null;
+                ingredientSo.FindProperty("iconImage").objectReferenceValue = null;
+                ingredientSo.FindProperty("useRecipeIcon").boolValue = false;
+                ingredientSo.ApplyModifiedPropertiesWithoutUndo();
+
+                // Hint glow: a thick yellow outline that IngredientHighlight switches on and pulses.
+                var glow = image.gameObject.AddComponent<Outline>();
+                glow.effectColor = new Color(1f, 0.9f, 0.2f, 1f);
+                glow.effectDistance = new Vector2(12f, -12f);
+                glow.enabled = false;
+
+                var highlight = image.gameObject.AddComponent<IngredientHighlight>();
+                SetReference(highlight, "glow", glow);
+            }
+
+            return state;
+        }
+
+        private static Button CreateButton(string objectName, RectTransform parent, Sprite sprite, string text, float fontSize,
+            Color color, Vector2 position, Vector2 size, out TextMeshProUGUI label)
+        {
+            Image image = CreateImage(objectName, parent, sprite, color);
+            image.type = Image.Type.Sliced;
+            image.raycastTarget = true; // buttons need it to receive taps
+            Anchor(image.rectTransform, BottomCentre, position, size);
+
+            var button = image.gameObject.AddComponent<Button>();
+            button.targetGraphic = image;
+            button.navigation = new Navigation { mode = Navigation.Mode.None };
+
+            label = CreateText("Label", image.rectTransform, text, fontSize, FontStyles.Bold);
+            Stretch(label.rectTransform);
+            label.color = new Color(0.2f, 0.12f, 0.2f);
+            label.textWrappingMode = TextWrappingModes.Normal;
+            return button;
+        }
+
+        private static RectTransform CreateContainer(string objectName, RectTransform parent)
+        {
+            var rect = new GameObject(objectName, typeof(RectTransform)).GetComponent<RectTransform>();
+            rect.SetParent(parent, false);
+            Stretch(rect);
+            return rect;
         }
 
         private static List<RecipeData> CreateOrLoadSampleRecipes()
@@ -392,12 +543,21 @@ namespace Witch.EditorTools
         {
             for (int i = 0; i < SampleRecipes.Length; i++)
             {
-                if (SampleRecipes[i].Reaction != FizzReactionName || recipes[i].reaction != null)
+                string reactionName = SampleRecipes[i].Reaction;
+                if (string.IsNullOrEmpty(reactionName) || recipes[i].reaction != null)
                 {
                     continue;
                 }
 
-                recipes[i].reaction = CreateOrLoadFizzReaction(recipes);
+                ReactionData reaction = reactionName == FizzReactionName
+                    ? CreateOrLoadFizzReaction(recipes)
+                    : reactionName == HeatReactionName ? CreateOrLoadHeatReaction(recipes) : null;
+                if (reaction == null)
+                {
+                    continue;
+                }
+
+                recipes[i].reaction = reaction;
                 recipes[i].ingredients?.Clear();
                 EditorUtility.SetDirty(recipes[i]);
             }
@@ -408,7 +568,44 @@ namespace Witch.EditorTools
         /// <summary>3 NaHCO3 + C6H8O7 -> Na3C6H5O7 + 3 CO2 + 3 H2O (baking soda + citric acid, fizzing CO2).</summary>
         private static ReactionData CreateOrLoadFizzReaction(List<RecipeData> recipes)
         {
-            string path = $"{ReactionFolder}/{FizzReactionName}.asset";
+            return CreateOrLoadReaction(FizzReactionName,
+                new List<ReactionData.Term>
+                {
+                    new ReactionData.Term(3, FindSampleRecipe(recipes, "BakingSoda")),
+                    new ReactionData.Term(1, FindSampleRecipe(recipes, "CitricAcid")),
+                },
+                new List<ReactionData.Term>
+                {
+                    new ReactionData.Term(1, "Na3C6H5O7", "Sodium Citrate"),
+                    new ReactionData.Term(3, "CO2", "Carbon Dioxide"),
+                    new ReactionData.Term(3, "H2O", "Water"),
+                },
+                "Citric acid from the lemon breaks baking soda apart, which lets out carbon dioxide gas, " +
+                "and that gas makes all the fizzy bubbles!");
+        }
+
+        /// <summary>2 NaHCO3 -> Na2CO3 + H2O + CO2 (heating baking soda; why cakes rise in the oven).</summary>
+        private static ReactionData CreateOrLoadHeatReaction(List<RecipeData> recipes)
+        {
+            return CreateOrLoadReaction(HeatReactionName,
+                new List<ReactionData.Term>
+                {
+                    new ReactionData.Term(2, FindSampleRecipe(recipes, "BakingSoda")),
+                },
+                new List<ReactionData.Term>
+                {
+                    new ReactionData.Term(1, "Na2CO3", "Washing Soda"),
+                    new ReactionData.Term(1, "H2O", "Water"),
+                    new ReactionData.Term(1, "CO2", "Carbon Dioxide"),
+                },
+                "Heat breaks baking soda into washing soda, water and carbon dioxide gas. That gas makes cakes " +
+                "rise in the oven! Only use a real stove with an adult.");
+        }
+
+        private static ReactionData CreateOrLoadReaction(string assetName, List<ReactionData.Term> reactants,
+            List<ReactionData.Term> products, string explanation)
+        {
+            string path = $"{ReactionFolder}/{assetName}.asset";
             var reaction = AssetDatabase.LoadAssetAtPath<ReactionData>(path);
             if (reaction != null)
             {
@@ -416,38 +613,262 @@ namespace Witch.EditorTools
             }
 
             EnsureFolder(ReactionFolder);
-            RecipeData bakingSoda = FindSampleRecipe(recipes, "BakingSoda");
-            RecipeData citricAcid = FindSampleRecipe(recipes, "CitricAcid");
-
             reaction = ScriptableObject.CreateInstance<ReactionData>();
-            reaction.reactants = new List<ReactionData.Term>
-            {
-                new ReactionData.Term(3, bakingSoda),
-                new ReactionData.Term(1, citricAcid),
-            };
-            reaction.products = new List<ReactionData.Term>
-            {
-                new ReactionData.Term(1, "Na3C6H5O7", "Sodium Citrate"),
-                new ReactionData.Term(3, "CO2", "Carbon Dioxide"),
-                new ReactionData.Term(3, "H2O", "Water"),
-            };
+            reaction.reactants = reactants;
+            reaction.products = products;
             reaction.reactantsInOrder = false;
-            reaction.kidExplanation = "Citric acid breaks baking soda apart, which lets out carbon dioxide gas, " +
-                                      "and that gas makes all the fizzy bubbles!";
+            reaction.kidExplanation = explanation;
 
             if (!reaction.IsBalanced(out string problem))
             {
-                Debug.LogError($"MainLabSceneBuilder: sample reaction is not balanced. {problem}");
+                Debug.LogError($"MainLabSceneBuilder: sample reaction '{assetName}' is not balanced. {problem}");
             }
 
             AssetDatabase.CreateAsset(reaction, path);
             return reaction;
         }
 
+        /// <summary>
+        /// Gives the sample recipes their kitchen conditions (juice not a whole lemon, water for salt, heat for washing
+        /// soda). Recipes a designer already gave conditions are left alone.
+        /// </summary>
+        private static void ApplySampleConditions(List<RecipeData> recipes)
+        {
+            RecipeData citricAcid = FindSampleRecipe(recipes, "CitricAcid");
+            RecipeData bakingSoda = FindSampleRecipe(recipes, "BakingSoda");
+            RecipeData salt = FindSampleRecipe(recipes, "TableSalt");
+
+            SetConditionsIfEmpty(FindSampleRecipe(recipes, "FizzyBubbles"), conditions =>
+            {
+                conditions.ingredientStates.Add(new IngredientStateRule { ingredient = citricAcid, requiredState = PhysicalState.Liquid });
+                conditions.ingredientStates.Add(new IngredientStateRule { ingredient = bakingSoda, requiredState = PhysicalState.Powder });
+                conditions.effect = ObservableEffect.Fizz;
+                conditions.whatYouSee = "Lots of fizzy bubbles! Add water first and see how the fizz gets weaker.";
+            });
+
+            SetConditionsIfEmpty(FindSampleRecipe(recipes, "SaltWater"), conditions =>
+            {
+                conditions.ingredientStates.Add(new IngredientStateRule { ingredient = salt, requiredState = PhysicalState.Powder });
+                conditions.needsWater = true;
+                conditions.minWaterParts = 1f;
+                conditions.effect = ObservableEffect.Dissolve;
+                conditions.whatYouSee = "The salt seems to vanish, but it is still there, spread out into pieces too " +
+                                        "tiny to see. That's called dissolving!";
+            });
+
+            SetConditionsIfEmpty(FindSampleRecipe(recipes, "WashingSoda"), conditions =>
+            {
+                conditions.ingredientStates.Add(new IngredientStateRule { ingredient = bakingSoda, requiredState = PhysicalState.Powder });
+                conditions.needsHeat = true;
+                conditions.minTemperatureC = 80f;
+                conditions.effect = ObservableEffect.Steam;
+            });
+
+            AssetDatabase.SaveAssets();
+        }
+
+        private static void SetConditionsIfEmpty(RecipeData recipe, System.Action<BrewConditions> setup)
+        {
+            if (recipe == null)
+            {
+                return;
+            }
+
+            if (recipe.conditions == null)
+            {
+                recipe.conditions = new BrewConditions();
+            }
+
+            if (recipe.conditions.HasConditions)
+            {
+                return;
+            }
+
+            setup(recipe.conditions);
+            EditorUtility.SetDirty(recipe);
+        }
+
+        /// <summary>Creates (or loads) the everyday kitchen items, keyed by asset name. Existing assets are kept as they are.</summary>
+        private static Dictionary<string, KitchenItemData> CreateOrLoadKitchenItems(List<RecipeData> recipes)
+        {
+            EnsureFolder(KitchenItemFolder);
+            var items = new Dictionary<string, KitchenItemData>();
+
+            // Lemon Juice first: the lemon squeezes into it.
+            items["LemonJuice"] = CreateOrLoadKitchenItem("LemonJuice", item =>
+            {
+                item.displayName = "Lemon Juice";
+                item.placeDescription = "in a glass";
+                item.substance = FindSampleRecipe(recipes, "CitricAcid");
+                item.startState = PhysicalState.Liquid;
+                item.emptiesWhenPoured = true;
+                item.placeholderColor = new Color(1f, 0.93f, 0.45f);
+            });
+
+            items["Lemon"] = CreateOrLoadKitchenItem("Lemon", item =>
+            {
+                item.displayName = "Lemon";
+                item.placeDescription = "in the fruit bowl";
+                item.substance = FindSampleRecipe(recipes, "CitricAcid");
+                item.startState = PhysicalState.Solid;
+                item.squeezeYield = items["LemonJuice"];
+                item.squeezeTaps = 3;
+                item.placeholderColor = new Color(1f, 0.86f, 0.25f);
+            });
+
+            items["BakingSodaBox"] = CreateOrLoadKitchenItem("BakingSodaBox", item =>
+            {
+                item.displayName = "Baking Soda";
+                item.placeDescription = "in a box";
+                item.substance = FindSampleRecipe(recipes, "BakingSoda");
+                item.startState = PhysicalState.Powder;
+                item.placeholderColor = new Color(0.62f, 0.85f, 1f);
+            });
+
+            items["SaltJar"] = CreateOrLoadKitchenItem("SaltJar", item =>
+            {
+                item.displayName = "Salt";
+                item.placeDescription = "in a jar";
+                item.substance = FindSampleRecipe(recipes, "TableSalt");
+                item.startState = PhysicalState.Powder;
+                item.placeholderColor = new Color(0.93f, 0.93f, 0.96f);
+            });
+
+            items["FlourBag"] = CreateOrLoadKitchenItem("FlourBag", item =>
+            {
+                item.displayName = "Flour";
+                item.placeDescription = "in a paper bag";
+                item.substance = FindSampleRecipe(recipes, "Flour");
+                item.startState = PhysicalState.Powder;
+                item.placeholderColor = new Color(0.96f, 0.9f, 0.78f);
+            });
+
+            items["WaterJug"] = CreateOrLoadKitchenItem("WaterJug", item =>
+            {
+                item.displayName = "Water";
+                item.placeDescription = "in a jug";
+                item.isWater = true;
+                item.startState = PhysicalState.Liquid;
+                item.pourAmount = 1f;
+                item.placeholderColor = new Color(0.6f, 0.82f, 1f);
+            });
+
+            AssetDatabase.SaveAssets();
+            return items;
+        }
+
+        private static KitchenItemData CreateOrLoadKitchenItem(string assetName, System.Action<KitchenItemData> setup)
+        {
+            string path = $"{KitchenItemFolder}/{assetName}.asset";
+            var item = AssetDatabase.LoadAssetAtPath<KitchenItemData>(path);
+            if (item != null)
+            {
+                return item;
+            }
+
+            item = ScriptableObject.CreateInstance<KitchenItemData>();
+            setup(item);
+            AssetDatabase.CreateAsset(item, path);
+            return item;
+        }
+
+        /// <summary>Stage 2 sample lore pages (data prep for the book, #14, and gathering, #18).</summary>
+        private static List<LoreEntryData> CreateOrLoadLoreEntries(List<RecipeData> recipes, Dictionary<string, KitchenItemData> kitchen)
+        {
+            EnsureFolder(LoreFolder);
+            var entries = new List<LoreEntryData>
+            {
+                CreateOrLoadLoreEntry("LemonTree", entry =>
+                {
+                    entry.category = LoreCategory.Plant;
+                    entry.commonName = "Lemon Tree";
+                    entry.scientificName = "Citrus limon";
+                    entry.description = "Lemon trees grow in warm, sunny places. Their fruit tastes sour because of " +
+                                        "citric acid, which is why lemon juice makes baking soda fizz.";
+                    entry.whereFound = "Warm, sunny places such as the Mediterranean";
+                    entry.gatherYield = FindSampleRecipe(recipes, "CitricAcid");
+                    entry.restocksKitchenItem = kitchen["Lemon"];
+                    entry.unlockedAtStart = true;
+                }),
+                CreateOrLoadLoreEntry("Halite", entry =>
+                {
+                    entry.category = LoreCategory.Crystal;
+                    entry.commonName = "Halite (Rock Salt)";
+                    entry.scientificName = "Sodium chloride, NaCl";
+                    entry.description = "Halite is salt as a natural crystal. It forms when salty seas and lakes dry " +
+                                        "up and leave little cubes of salt behind.";
+                    entry.whereFound = "Dried-up salt lakes and underground salt mines";
+                    entry.gatherYield = FindSampleRecipe(recipes, "TableSalt");
+                    entry.restocksKitchenItem = kitchen["SaltJar"];
+                    entry.unlockAfterBrewing.Add(FindSampleRecipe(recipes, "SaltWater"));
+                }),
+                CreateOrLoadLoreEntry("Nahcolite", entry =>
+                {
+                    entry.category = LoreCategory.Mineral;
+                    entry.commonName = "Nahcolite";
+                    entry.scientificName = "Sodium bicarbonate, NaHCO3";
+                    entry.description = "Nahcolite is baking soda that nature made! It formed long ago in old lake " +
+                                        "beds as salty water dried up.";
+                    entry.whereFound = "Old lake beds, for example in Colorado, USA";
+                    entry.gatherYield = FindSampleRecipe(recipes, "BakingSoda");
+                    entry.restocksKitchenItem = kitchen["BakingSodaBox"];
+                    entry.unlockAfterBrewing.Add(FindSampleRecipe(recipes, "FizzyBubbles"));
+                }),
+                CreateOrLoadLoreEntry("Chamomile", entry =>
+                {
+                    entry.category = LoreCategory.Herb;
+                    entry.commonName = "Chamomile";
+                    entry.scientificName = "Matricaria chamomilla";
+                    entry.description = "Chamomile is a small herb with flowers like tiny daisies. People dry the " +
+                                        "flowers to make a calming tea.";
+                    entry.whereFound = "Sunny fields and gardens in Europe and Asia";
+                    entry.safetyNote = "Only pick and use herbs together with an adult who knows them.";
+                    entry.unlockHint = "Coming in a later adventure!";
+                }),
+            };
+
+            AssetDatabase.SaveAssets();
+            return entries;
+        }
+
+        private static LoreEntryData CreateOrLoadLoreEntry(string assetName, System.Action<LoreEntryData> setup)
+        {
+            string path = $"{LoreFolder}/{assetName}.asset";
+            var entry = AssetDatabase.LoadAssetAtPath<LoreEntryData>(path);
+            if (entry != null)
+            {
+                return entry;
+            }
+
+            entry = ScriptableObject.CreateInstance<LoreEntryData>();
+            setup(entry);
+            AssetDatabase.CreateAsset(entry, path);
+            return entry;
+        }
+
         private static RecipeData FindSampleRecipe(List<RecipeData> recipes, string assetName)
         {
             int index = System.Array.FindIndex(SampleRecipes, s => s.AssetName == assetName);
             return index >= 0 ? recipes[index] : null;
+        }
+
+        private static void SetObjectList(Object target, string propertyName, List<Object> values)
+        {
+            var so = new SerializedObject(target);
+            SerializedProperty property = so.FindProperty(propertyName);
+            if (property == null || !property.isArray)
+            {
+                Debug.LogError($"MainLabSceneBuilder: list '{propertyName}' not found on {target.GetType().Name}.");
+                return;
+            }
+
+            property.arraySize = values.Count;
+            for (int i = 0; i < values.Count; i++)
+            {
+                property.GetArrayElementAtIndex(i).objectReferenceValue = values[i];
+            }
+
+            so.ApplyModifiedPropertiesWithoutUndo();
         }
 
         private static ParticleSystem CreateOrLoadParticlePrefab()
