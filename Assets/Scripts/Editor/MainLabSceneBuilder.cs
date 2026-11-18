@@ -99,11 +99,14 @@ namespace Witch.EditorTools
                 return;
             }
 
+            // Open the new scene BEFORE touching assets: NewScene(Single) unloads unused assets, which destroys
+            // freshly created ScriptableObjects that nothing references yet (MissingReferenceException later on).
+            Scene scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
+
             List<RecipeData> recipes = CreateOrLoadSampleRecipes();
             LinkSampleReactions(recipes);
+            recipes = ReloadSampleRecipes(); // fresh, persistent references from disk
             ParticleSystem particlePrefab = CreateOrLoadParticlePrefab();
-
-            Scene scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
 
             Camera camera = CreateCamera();
             CreateEventSystem();
@@ -306,6 +309,25 @@ namespace Witch.EditorTools
             }
 
             AssetDatabase.SaveAssets();
+            return result;
+        }
+
+        /// <summary>Loads every sample recipe asset from disk, in <see cref="SampleRecipes"/> order.</summary>
+        private static List<RecipeData> ReloadSampleRecipes()
+        {
+            var result = new List<RecipeData>();
+            foreach (SampleRecipe sample in SampleRecipes)
+            {
+                string path = $"{RecipeFolder}/{sample.AssetName}.asset";
+                var recipe = AssetDatabase.LoadAssetAtPath<RecipeData>(path);
+                if (recipe == null)
+                {
+                    throw new System.InvalidOperationException($"MainLabSceneBuilder: could not load {path}.");
+                }
+
+                result.Add(recipe);
+            }
+
             return result;
         }
 
