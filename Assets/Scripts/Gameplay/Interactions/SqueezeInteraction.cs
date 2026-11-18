@@ -103,6 +103,13 @@ namespace Witch.Gameplay
         /// <summary>One squeeze. Public so a tap-to-select alternative (#21) or tests can call it.</summary>
         public void Squeeze()
         {
+            // A spent fruit with an empty glass: tapping the bowl takes a fresh one from the stock (e.g. after gathering).
+            if (itemState.IsSqueezed && juiceTarget != null && juiceTarget.IsEmpty)
+            {
+                TryRestock();
+                return;
+            }
+
             KitchenItemData contents = itemState.Contents;
             if (contents == null || !contents.CanBeSqueezed || itemState.IsSqueezed)
             {
@@ -157,9 +164,32 @@ namespace Witch.Gameplay
         {
             if (restockWhenTargetEmptied && target.IsEmpty && itemState.IsSqueezed)
             {
-                taps = 0;
-                itemState.ResetToStart();
+                TryRestock();
             }
+        }
+
+        /// <summary>
+        /// Puts a fresh fruit in the bowl, taking one from the <see cref="StockedItem"/> if there is one. Returns false
+        /// (and shows a note) when the stock is empty. Public so harvesting can refill an empty bowl straight away.
+        /// </summary>
+        public bool TryRestock()
+        {
+            if (!itemState.IsSqueezed)
+            {
+                return true;
+            }
+
+            var stocked = GetComponent<StockedItem>();
+            if (stocked != null && !stocked.TryUse())
+            {
+                itemState.SetNote(stocked.EmptyHint);
+                onSqueezeBlocked.Invoke(stocked.EmptyHint);
+                return false;
+            }
+
+            taps = 0;
+            itemState.ResetToStart();
+            return true;
         }
 
         private void PlaySquash()
