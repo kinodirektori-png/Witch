@@ -128,6 +128,7 @@ namespace Witch.EditorTools
             recipes = ReloadSampleRecipes(); // fresh, persistent references from disk
             ApplySampleConditions(recipes);
             Dictionary<string, KitchenItemData> kitchen = CreateOrLoadKitchenItems(recipes);
+            KitchenArt.Apply(kitchen, recipes); // ingredient sprites from Assets/Art/Kitchen (issue #41)
             List<LoreEntryData> lore = CreateOrLoadLoreEntries(recipes, kitchen);
             ParticleSystem particlePrefab = CreateOrLoadParticlePrefab();
 
@@ -428,18 +429,27 @@ namespace Witch.EditorTools
             image.type = Image.Type.Sliced;
             Anchor(image.rectTransform, BottomCentre, position, size);
 
-            TextMeshProUGUI nameLabel = CreateText("Name", image.rectTransform, contents != null ? contents.displayName : emptyName, 38, FontStyles.Bold);
-            Anchor(nameLabel.rectTransform, new Vector2(0.5f, 0.5f), new Vector2(0f, 30f), new Vector2(size.x - 10f, 110f));
-            nameLabel.color = new Color(0.15f, 0.1f, 0.2f);
-            nameLabel.textWrappingMode = TextWrappingModes.Normal;
-            nameLabel.enableAutoSizing = true;
-            nameLabel.fontSizeMin = 24f;
-            nameLabel.fontSizeMax = 38f;
+            // Name tag along the bottom edge, so the ingredient art above it stays visible (issue #41).
+            Image tag = CreateImage("NameTag", image.rectTransform, sprite, new Color(1f, 0.97f, 0.88f, 0.85f));
+            tag.type = Image.Type.Sliced;
+            tag.raycastTarget = false;
+            Anchor(tag.rectTransform, new Vector2(0.5f, 0f), new Vector2(0f, 40f), new Vector2(size.x, 84f));
 
-            TextMeshProUGUI captionLabel = CreateText("Caption", image.rectTransform, contents != null ? contents.placeDescription : "", 22, FontStyles.Normal);
-            Anchor(captionLabel.rectTransform, new Vector2(0.5f, 0.5f), new Vector2(0f, -65f), new Vector2(size.x - 20f, 80f));
+            TextMeshProUGUI nameLabel = CreateText("Name", tag.rectTransform, contents != null ? contents.displayName : emptyName, 32, FontStyles.Bold);
+            Anchor(nameLabel.rectTransform, new Vector2(0.5f, 0.5f), new Vector2(0f, 14f), new Vector2(size.x - 10f, 46f));
+            nameLabel.color = new Color(0.15f, 0.1f, 0.2f);
+            nameLabel.textWrappingMode = TextWrappingModes.NoWrap;
+            nameLabel.enableAutoSizing = true;
+            nameLabel.fontSizeMin = 20f;
+            nameLabel.fontSizeMax = 32f;
+
+            TextMeshProUGUI captionLabel = CreateText("Caption", tag.rectTransform, contents != null ? contents.placeDescription : "", 20, FontStyles.Normal);
+            Anchor(captionLabel.rectTransform, new Vector2(0.5f, 0.5f), new Vector2(0f, -22f), new Vector2(size.x - 10f, 34f));
             captionLabel.color = new Color(0.15f, 0.1f, 0.2f, 0.85f);
-            captionLabel.textWrappingMode = TextWrappingModes.Normal;
+            captionLabel.textWrappingMode = TextWrappingModes.NoWrap;
+            captionLabel.enableAutoSizing = true;
+            captionLabel.fontSizeMin = 14f;
+            captionLabel.fontSizeMax = 20f;
 
             image.gameObject.AddComponent<DraggableItem>();
 
