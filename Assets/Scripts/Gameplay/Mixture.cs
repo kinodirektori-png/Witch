@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using UnityEngine;
 using Witch.Data;
 
 namespace Witch.Gameplay
@@ -10,11 +11,15 @@ namespace Witch.Gameplay
         public readonly PhysicalState State;
         public readonly float Amount;
 
-        public MixtureEntry(RecipeData substance, PhysicalState state, float amount)
+        /// <summary>Colour it gives the liquid in the pot (from the kitchen item it came from).</summary>
+        public readonly Color Tint;
+
+        public MixtureEntry(RecipeData substance, PhysicalState state, float amount, Color tint)
         {
             Substance = substance;
             State = state;
             Amount = amount;
+            Tint = tint;
         }
     }
 
@@ -70,10 +75,29 @@ namespace Witch.Gameplay
 
         public void AddSubstance(RecipeData substance, PhysicalState state, float amount = 1f)
         {
+            AddSubstance(substance, state, amount, Color.white);
+        }
+
+        public void AddSubstance(RecipeData substance, PhysicalState state, float amount, Color tint)
+        {
             if (substance != null && amount > 0f)
             {
-                entries.Add(new MixtureEntry(substance, state, amount));
+                entries.Add(new MixtureEntry(substance, state, amount, tint));
             }
+        }
+
+        /// <summary>Amount-weighted average tint of everything poured in. White when empty.</summary>
+        public Color GetAverageTint()
+        {
+            float total = 0f;
+            Color sum = Color.clear;
+            foreach (MixtureEntry entry in entries)
+            {
+                sum += entry.Tint * entry.Amount;
+                total += entry.Amount;
+            }
+
+            return total > 0f ? sum / total : Color.white;
         }
 
         public void AddWater(float parts)

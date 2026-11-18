@@ -51,12 +51,18 @@ namespace Witch.Gameplay
         /// <summary>Pours a substance in.</summary>
         public void AddSubstance(RecipeData substance, PhysicalState state, float amount = 1f)
         {
+            AddSubstance(substance, state, amount, Color.white);
+        }
+
+        /// <summary>Pours a substance in; <paramref name="tint"/> colours the liquid (see <see cref="MixtureVisual"/>).</summary>
+        public void AddSubstance(RecipeData substance, PhysicalState state, float amount, Color tint)
+        {
             if (substance == null)
             {
                 return;
             }
 
-            mixture.AddSubstance(substance, state, amount);
+            mixture.AddSubstance(substance, state, amount, tint);
             MixtureChanged?.Invoke(this);
         }
 
