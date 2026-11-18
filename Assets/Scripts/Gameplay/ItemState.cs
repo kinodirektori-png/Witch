@@ -147,6 +147,17 @@ namespace Witch.Gameplay
             }
         }
 
+        /// <summary>
+        /// Shows a short note in the caption (e.g. "Gather more lemons in the garden!") until the item next changes.
+        /// </summary>
+        public void SetNote(string note)
+        {
+            if (captionLabel != null && !string.IsNullOrEmpty(note))
+            {
+                captionLabel.text = note;
+            }
+        }
+
         /// <summary>Puts the item back the way the scene started (e.g. a fresh lemon in the bowl).</summary>
         public void ResetToStart()
         {

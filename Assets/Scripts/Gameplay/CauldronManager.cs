@@ -263,8 +263,15 @@ namespace Witch.Gameplay
                 return false;
             }
 
+            if (!PassesPourGates(droppedItem, out string gateHint))
+            {
+                Reject(droppedItem, gateHint);
+                return false;
+            }
+
             contents.Add(ingredient);
             PourIntoVessel(droppedItem, itemState, ingredient);
+            NotifyPourGates(droppedItem);
 
             if (consumeIngredientsOnDrop)
             {
@@ -482,7 +489,14 @@ namespace Witch.Gameplay
                 return false;
             }
 
+            if (!PassesPourGates(droppedItem, out string gateHint))
+            {
+                Reject(droppedItem, gateHint);
+                return false;
+            }
+
             PrepareVesselForPour();
+            NotifyPourGates(droppedItem);
             KitchenItemData data = water.Contents;
             PlayPourFeedback(droppedItem, water);
             vessel.AddWater(data != null ? data.pourAmount : 1f); // pending recipes re-check via MixtureChanged
@@ -538,6 +552,39 @@ namespace Witch.Gameplay
             }
 
             PlayPourFeedback(droppedItem, itemState);
+        }
+
+        /// <summary>Asks every <see cref="IPourGate"/> on the item (e.g. an empty salt jar refuses).</summary>
+        private static bool PassesPourGates(GameObject droppedItem, out string hint)
+        {
+            hint = string.Empty;
+            if (droppedItem == null)
+            {
+                return true;
+            }
+
+            foreach (IPourGate gate in droppedItem.GetComponents<IPourGate>())
+            {
+                if (gate != null && !gate.CanPour(out hint))
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        private static void NotifyPourGates(GameObject droppedItem)
+        {
+            if (droppedItem == null)
+            {
+                return;
+            }
+
+            foreach (IPourGate gate in droppedItem.GetComponents<IPourGate>())
+            {
+                gate?.OnPoured();
+            }
         }
 
         private static void PlayPourFeedback(GameObject droppedItem, ItemState itemState)

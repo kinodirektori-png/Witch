@@ -155,8 +155,8 @@ namespace Witch.EditorTools
             Anchor(plank.rectTransform, BottomCentre, new Vector2(0f, 1010f), new Vector2(1000f, 36f));
 
             var shelfItemSize = new Vector2(230f, 250f);
-            CreateKitchenItem(shelf, "SaltJar", kitchen["SaltJar"], roundedSprite, new Vector2(-330f, 1153f), shelfItemSize);
-            CreateKitchenItem(shelf, "BakingSodaBox", kitchen["BakingSodaBox"], roundedSprite, new Vector2(0f, 1153f), shelfItemSize);
+            ItemState saltJar = CreateKitchenItem(shelf, "SaltJar", kitchen["SaltJar"], roundedSprite, new Vector2(-330f, 1153f), shelfItemSize);
+            ItemState bakingSodaBox = CreateKitchenItem(shelf, "BakingSodaBox", kitchen["BakingSodaBox"], roundedSprite, new Vector2(0f, 1153f), shelfItemSize);
             CreateKitchenItem(shelf, "FlourBag", kitchen["FlourBag"], roundedSprite, new Vector2(330f, 1153f), shelfItemSize);
 
             // ---- Stove with heat knob ----
@@ -371,6 +371,32 @@ namespace Witch.EditorTools
             SetReference(book, "discovery", discovery);
             SetReference(book, "loreBook", loreBook);
 
+            // ---- Stock (spare lemons, scoops left) and the garden that refills it ----
+            var stock = pot.gameObject.AddComponent<HarvestStock>();
+            var stockSo = new SerializedObject(stock);
+            SerializedProperty startingStock = stockSo.FindProperty("startingStock");
+            var startCounts = new (KitchenItemData item, int count)[]
+            {
+                (kitchen["Lemon"], 2),          // spare lemons after the one in the bowl
+                (kitchen["SaltJar"], 3),
+                (kitchen["BakingSodaBox"], 6),  // fizz takes 3, washing soda 2
+            };
+            startingStock.arraySize = startCounts.Length;
+            for (int i = 0; i < startCounts.Length; i++)
+            {
+                SerializedProperty element = startingStock.GetArrayElementAtIndex(i);
+                element.FindPropertyRelative("item").objectReferenceValue = startCounts[i].item;
+                element.FindPropertyRelative("count").intValue = startCounts[i].count;
+            }
+
+            stockSo.ApplyModifiedPropertiesWithoutUndo();
+
+            AddStockedItem(lemon, stock, usedWhenPoured: false);
+            AddStockedItem(saltJar, stock, usedWhenPoured: true);
+            AddStockedItem(bakingSodaBox, stock, usedWhenPoured: true);
+
+            CreateGarden(canvasRect, hudRect, popupRect, roundedSprite, circleSprite, book, loreBook, stock, lore);
+
             var hud = hudRect.gameObject.AddComponent<GameHUD>();
             SetReference(hud, "cauldron", cauldron);
             SetReference(hud, "discovery", discovery);
@@ -450,6 +476,153 @@ namespace Witch.EditorTools
             }
 
             return state;
+        }
+
+        /// <summary>Makes a kitchen item use up the stock, with an "x3" count in its top-right corner.</summary>
+        private static void AddStockedItem(ItemState item, HarvestStock stock, bool usedWhenPoured)
+        {
+            var rect = (RectTransform)item.transform;
+            TextMeshProUGUI countLabel = CreateText("Count", rect, "x0", 34, FontStyles.Bold);
+            Anchor(countLabel.rectTransform, new Vector2(1f, 1f), new Vector2(-40f, -30f), new Vector2(90f, 50f));
+            countLabel.color = new Color(0.35f, 0.15f, 0.4f);
+
+            var stocked = item.gameObject.AddComponent<StockedItem>();
+            var stockedSo = new SerializedObject(stocked);
+            stockedSo.FindProperty("stock").objectReferenceValue = stock;
+            stockedSo.FindProperty("stockItem").objectReferenceValue = item.StartContents;
+            stockedSo.FindProperty("countLabel").objectReferenceValue = countLabel;
+            stockedSo.FindProperty("usedWhenPoured").boolValue = usedWhenPoured;
+            stockedSo.ApplyModifiedPropertiesWithoutUndo();
+        }
+
+        /// <summary>
+        /// Builds the garden: a HUD button (top left) and a full-screen panel with one hold-to-gather card per lore page
+        /// that yields a kitchen item. The panel sits just below the formula popup.
+        /// </summary>
+        private static void CreateGarden(RectTransform canvasRect, RectTransform hudRect, RectTransform popupRect,
+            Sprite roundedSprite, Sprite circleSprite, RecipeBookUI book, LoreBook loreBook, HarvestStock stock,
+            List<LoreEntryData> lore)
+        {
+            Button openButton = CreateButton("GardenButton", hudRect, roundedSprite, "Garden", 34,
+                new Color(0.45f, 0.75f, 0.4f), Vector2.zero, new Vector2(150f, 140f), out TextMeshProUGUI openLabel);
+            Anchor((RectTransform)openButton.transform, new Vector2(0f, 1f), new Vector2(100f, -110f), new Vector2(150f, 140f));
+            openLabel.color = Color.white;
+
+            Image backdrop = CreateImage("Garden", canvasRect, null, new Color(0.33f, 0.55f, 0.38f));
+            Stretch(backdrop.rectTransform);
+            backdrop.raycastTarget = true; // blocks the kitchen while open
+            backdrop.rectTransform.SetSiblingIndex(popupRect.GetSiblingIndex()); // below the popup
+            CanvasGroup panelGroup = backdrop.gameObject.AddComponent<CanvasGroup>();
+            panelGroup.alpha = 0f;
+            panelGroup.interactable = false;
+            panelGroup.blocksRaycasts = false;
+
+            TextMeshProUGUI title = CreateText("Title", backdrop.rectTransform, "Medea's Garden", 72, FontStyles.Bold);
+            Anchor(title.rectTransform, new Vector2(0.5f, 1f), new Vector2(0f, -140f), new Vector2(900f, 110f));
+
+            TextMeshProUGUI hint = CreateText("Hint", backdrop.rectTransform,
+                "Press and hold to gather. Things grow back after a moment.", 34, FontStyles.Italic);
+            Anchor(hint.rectTransform, new Vector2(0.5f, 1f), new Vector2(0f, -230f), new Vector2(980f, 70f));
+            hint.color = new Color(1f, 1f, 1f, 0.85f);
+
+            Button closeButton = CreateButton("BackButton", backdrop.rectTransform, roundedSprite, "Back to kitchen", 44,
+                new Color(0.95f, 0.85f, 0.55f), new Vector2(0f, 130f), new Vector2(560f, 150f), out _);
+
+            var spotViews = new List<HarvestSpotView>();
+            float y = -440f;
+            foreach (LoreEntryData entry in lore)
+            {
+                if (entry == null || entry.gatherYield == null || entry.restocksKitchenItem == null)
+                {
+                    continue; // teasers for later stages (e.g. chamomile) have no harvest spot yet
+                }
+
+                spotViews.Add(CreateHarvestSpot(backdrop.rectTransform, entry, y, roundedSprite, circleSprite, loreBook, stock));
+                y -= 370f;
+            }
+
+            var garden = backdrop.gameObject.AddComponent<GardenUI>();
+            SetReference(garden, "panel", panelGroup);
+            SetReference(garden, "openButton", openButton);
+            SetReference(garden, "closeButton", closeButton);
+            SetReference(garden, "book", book);
+            SetObjectList(garden, "spots", spotViews.Cast<Object>().ToList());
+        }
+
+        private static HarvestSpotView CreateHarvestSpot(RectTransform parent, LoreEntryData entry, float y,
+            Sprite roundedSprite, Sprite circleSprite, LoreBook loreBook, HarvestStock stock)
+        {
+            // The card itself receives the press-and-hold, so it is the only raycast target.
+            Image card = CreateImage(entry.name + "Spot", parent, roundedSprite, new Color(0.96f, 0.93f, 0.8f));
+            card.type = Image.Type.Sliced;
+            card.raycastTarget = true;
+            Anchor(card.rectTransform, new Vector2(0.5f, 1f), new Vector2(0f, y), new Vector2(1000f, 340f));
+
+            Image picture = CreateImage("Picture", card.rectTransform, circleSprite, Color.white);
+            picture.raycastTarget = false;
+            Anchor(picture.rectTransform, new Vector2(0f, 0.5f), new Vector2(160f, 20f), new Vector2(240f, 240f));
+
+            TextMeshProUGUI nameLabel = CreateSpotText("Name", card.rectTransform, 46, FontStyles.Bold, new Vector2(170f, 110f), 60f);
+            TextMeshProUGUI scientific = CreateSpotText("ScientificName", card.rectTransform, 32, FontStyles.Normal, new Vector2(170f, 60f), 46f);
+            TextMeshProUGUI where = CreateSpotText("WhereFound", card.rectTransform, 28, FontStyles.Normal, new Vector2(170f, 5f), 70f);
+            TextMeshProUGUI status = CreateSpotText("Status", card.rectTransform, 32, FontStyles.Bold, new Vector2(170f, -70f), 50f);
+            nameLabel.color = new Color(0.25f, 0.12f, 0.3f);
+            scientific.color = new Color(0.35f, 0.25f, 0.4f);
+            where.color = new Color(0.3f, 0.3f, 0.3f);
+            status.color = new Color(0.2f, 0.45f, 0.25f);
+
+            Image barBack = CreateImage("ProgressBack", card.rectTransform, roundedSprite, new Color(0.8f, 0.75f, 0.65f));
+            barBack.type = Image.Type.Sliced;
+            barBack.raycastTarget = false;
+            Anchor(barBack.rectTransform, new Vector2(0.5f, 0f), new Vector2(0f, 35f), new Vector2(940f, 34f));
+
+            Image fill = CreateImage("ProgressFill", barBack.rectTransform, null, new Color(0.4f, 0.75f, 0.35f));
+            fill.raycastTarget = false;
+            fill.type = Image.Type.Filled;
+            fill.fillMethod = Image.FillMethod.Horizontal;
+            fill.fillOrigin = (int)Image.OriginHorizontal.Left;
+            fill.fillAmount = 0f;
+            Stretch(fill.rectTransform);
+
+            TextMeshProUGUI feedback = CreateText("Feedback", card.rectTransform, "+1", 52, FontStyles.Bold);
+            Anchor(feedback.rectTransform, new Vector2(0f, 0.5f), new Vector2(160f, 60f), new Vector2(300f, 80f));
+            feedback.color = new Color(1f, 0.85f, 0.2f);
+            feedback.gameObject.SetActive(false);
+
+            var spot = card.gameObject.AddComponent<HarvestSpot>();
+            var spotSo = new SerializedObject(spot);
+            spotSo.FindProperty("entry").objectReferenceValue = entry;
+            spotSo.FindProperty("loreBook").objectReferenceValue = loreBook;
+            spotSo.FindProperty("stock").objectReferenceValue = stock;
+            spotSo.FindProperty("amountPerHarvest").intValue = entry.restocksKitchenItem.name == "BakingSodaBox" ? 3 : entry.restocksKitchenItem.name == "SaltJar" ? 2 : 1;
+            spotSo.ApplyModifiedPropertiesWithoutUndo();
+
+            var view = card.gameObject.AddComponent<HarvestSpotView>();
+            SetReference(view, "spot", spot);
+            SetReference(view, "picture", picture);
+            SetReference(view, "nameLabel", nameLabel);
+            SetReference(view, "scientificLabel", scientific);
+            SetReference(view, "whereLabel", where);
+            SetReference(view, "statusLabel", status);
+            SetReference(view, "progressFill", fill);
+            SetReference(view, "feedbackLabel", feedback);
+            SetReference(view, "fallbackPicture", circleSprite);
+
+            UnityEventTools.AddPersistentListener(spot.onHarvested, view.ShowFeedback);
+            return view;
+        }
+
+        private static TextMeshProUGUI CreateSpotText(string objectName, RectTransform parent, float size, FontStyles style,
+            Vector2 position, float height)
+        {
+            TextMeshProUGUI label = CreateText(objectName, parent, "", size, style);
+            Anchor(label.rectTransform, new Vector2(0.5f, 0.5f), position, new Vector2(640f, height));
+            label.alignment = TextAlignmentOptions.MidlineLeft;
+            label.textWrappingMode = TextWrappingModes.Normal;
+            label.enableAutoSizing = true;
+            label.fontSizeMin = 20f;
+            label.fontSizeMax = size;
+            return label;
         }
 
         /// <summary>
