@@ -10,7 +10,7 @@ namespace Witch.Gameplay
     /// Listens to a <see cref="CauldronManager"/>; the total is the cauldron's recipe dictionary.
     /// </summary>
     /// <remarks>
-    /// In memory only for now. The save system (#19) can restore progress with <see cref="MarkDiscovered"/>.
+    /// Saved and restored by <see cref="SaveSystem"/> (see <see cref="RestoreDiscovered"/>).
     /// </remarks>
     public class RecipeDiscovery : MonoBehaviour
     {
@@ -75,6 +75,28 @@ namespace Witch.Gameplay
 
             discoveredInOrder.Add(recipe);
             RecipeDiscovered?.Invoke(recipe);
+            ProgressChanged?.Invoke();
+        }
+
+        /// <summary>
+        /// Restores discoveries from a save without raising <see cref="RecipeDiscovered"/> (so nothing shows as new).
+        /// Raises <see cref="ProgressChanged"/> once.
+        /// </summary>
+        public void RestoreDiscovered(IEnumerable<RecipeData> recipes)
+        {
+            if (recipes == null)
+            {
+                return;
+            }
+
+            foreach (RecipeData recipe in recipes)
+            {
+                if (recipe != null && discovered.Add(recipe))
+                {
+                    discoveredInOrder.Add(recipe);
+                }
+            }
+
             ProgressChanged?.Invoke();
         }
 
