@@ -398,6 +398,13 @@ namespace Witch.EditorTools
 
             CreateGarden(canvasRect, hudRect, popupRect, roundedSprite, circleSprite, book, loreBook, stock, lore);
 
+            // ---- Saving: discoveries, lore pages, stock and the active recipe survive closing the app ----
+            var saveSystem = pot.gameObject.AddComponent<SaveSystem>();
+            SetReference(saveSystem, "cauldron", cauldron);
+            SetReference(saveSystem, "discovery", discovery);
+            SetReference(saveSystem, "loreBook", loreBook);
+            SetReference(saveSystem, "stock", stock);
+
             var hud = hudRect.gameObject.AddComponent<GameHUD>();
             SetReference(hud, "cauldron", cauldron);
             SetReference(hud, "discovery", discovery);
