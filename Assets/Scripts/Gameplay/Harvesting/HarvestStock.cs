@@ -10,7 +10,7 @@ namespace Witch.Gameplay
     /// Harvesting adds to it and using an item takes from it. Items that aren't listed are unlimited (e.g. flour).
     /// </summary>
     /// <remarks>
-    /// In memory only. The inventory and save system (#19) can restore counts with <see cref="Set"/>.
+    /// Saved and restored by <see cref="SaveSystem"/>.
     /// </remarks>
     public class HarvestStock : MonoBehaviour
     {
@@ -29,7 +29,26 @@ namespace Witch.Gameplay
 
         private readonly Dictionary<KitchenItemData, int> counts = new Dictionary<KitchenItemData, int>();
 
+        /// <summary>Every item that runs out, with its current count (for the save system and inventory UI).</summary>
+        public IReadOnlyDictionary<KitchenItemData, int> Counts => counts;
+
+        /// <summary>Puts every count back to its starting value (e.g. "new game").</summary>
+        public void ResetToStart()
+        {
+            counts.Clear();
+            FillStartingStock();
+            foreach (KeyValuePair<KitchenItemData, int> pair in new List<KeyValuePair<KitchenItemData, int>>(counts))
+            {
+                Changed?.Invoke(pair.Key, pair.Value);
+            }
+        }
+
         private void Awake()
+        {
+            FillStartingStock();
+        }
+
+        private void FillStartingStock()
         {
             foreach (StartingStock entry in startingStock)
             {

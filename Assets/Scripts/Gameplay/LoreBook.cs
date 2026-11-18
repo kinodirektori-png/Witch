@@ -57,6 +57,44 @@ namespace Witch.Gameplay
             }
         }
 
+        /// <summary>Every unlocked page, in book order (for the save system).</summary>
+        public List<LoreEntryData> GetUnlockedEntries()
+        {
+            return entries.FindAll(entry => entry != null && unlocked.Contains(entry));
+        }
+
+        /// <summary>
+        /// Restores unlocked pages from a save without raising <see cref="EntryUnlocked"/>, so they don't show as new.
+        /// </summary>
+        public void RestoreUnlocked(IEnumerable<LoreEntryData> restored)
+        {
+            if (restored == null)
+            {
+                return;
+            }
+
+            foreach (LoreEntryData entry in restored)
+            {
+                if (entry != null)
+                {
+                    unlocked.Add(entry);
+                }
+            }
+        }
+
+        /// <summary>Locks everything again except pages unlocked at the start (e.g. "new game").</summary>
+        public void ResetProgress()
+        {
+            unlocked.Clear();
+            foreach (LoreEntryData entry in entries)
+            {
+                if (entry != null && entry.unlockedAtStart)
+                {
+                    unlocked.Add(entry);
+                }
+            }
+        }
+
         private void Awake()
         {
             if (discovery == null)
