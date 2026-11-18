@@ -147,50 +147,12 @@ namespace Witch.EditorTools
             TextMeshProUGUI title = CreateText("Title", canvasRect, "Medea's Kitchen Lab", 80, FontStyles.Bold);
             Anchor(title.rectTransform, new Vector2(0.5f, 1f), new Vector2(0f, -140f), new Vector2(1000f, 120f));
 
-<<<<<<< HEAD
             // ---- Wall shelf: salt jar, baking soda box, flour bag ----
             RectTransform shelf = CreateContainer("Shelf", canvasRect);
             Image plank = CreateImage("Plank", shelf, roundedSprite, new Color(0.55f, 0.36f, 0.2f));
             plank.type = Image.Type.Sliced;
             plank.raycastTarget = false;
             Anchor(plank.rectTransform, BottomCentre, new Vector2(0f, 1010f), new Vector2(1000f, 36f));
-=======
-            // HUD: goal icon + text on the left, hint button on the right, "recipes found" underneath.
-            var hudRect = new GameObject("HUD", typeof(RectTransform)).GetComponent<RectTransform>();
-            hudRect.SetParent(canvasRect, false);
-            Stretch(hudRect);
-
-            Image goalIcon = CreateImage("GoalIcon", hudRect, circleSprite, Color.white);
-            Anchor(goalIcon.rectTransform, new Vector2(0.5f, 1f), new Vector2(-380f, -270f), new Vector2(100f, 100f));
-            goalIcon.raycastTarget = false;
-            goalIcon.preserveAspect = true;
-
-            TextMeshProUGUI goalText = CreateText("GoalText", hudRect, "Brew: ...", 56, FontStyles.Normal);
-            Anchor(goalText.rectTransform, new Vector2(0.5f, 1f), new Vector2(5f, -270f), new Vector2(650f, 120f));
-            goalText.alignment = TextAlignmentOptions.MidlineLeft;
-            goalText.color = new Color(1f, 0.9f, 0.6f);
-            goalText.textWrappingMode = TextWrappingModes.Normal;
-            goalText.enableAutoSizing = true;
-            goalText.fontSizeMin = 32f;
-            goalText.fontSizeMax = 56f;
-
-            TextMeshProUGUI progressText = CreateText("RecipesFound", hudRect, "Recipes found: 0 / 0", 40, FontStyles.Normal);
-            Anchor(progressText.rectTransform, new Vector2(0.5f, 1f), new Vector2(0f, -370f), new Vector2(900f, 60f));
-            progressText.color = new Color(1f, 1f, 1f, 0.75f);
-
-            // 150 canvas units is about 50 pt on an iPhone, above the 44 pt minimum touch target.
-            Image hintImage = CreateImage("HintButton", hudRect, circleSprite, new Color(1f, 0.82f, 0.3f));
-            Anchor(hintImage.rectTransform, new Vector2(1f, 1f), new Vector2(-100f, -270f), new Vector2(150f, 150f));
-            hintImage.raycastTarget = true; // the button needs it to receive taps
-            var hintButton = hintImage.gameObject.AddComponent<Button>();
-            hintButton.targetGraphic = hintImage;
-            hintButton.navigation = new Navigation { mode = Navigation.Mode.None };
-            hintImage.gameObject.AddComponent<CanvasGroup>().alpha = 0f; // GameHUD shows it after wrong tries
-
-            TextMeshProUGUI hintLabel = CreateText("Label", hintImage.rectTransform, "Hint", 40, FontStyles.Bold);
-            Stretch(hintLabel.rectTransform);
-            hintLabel.color = new Color(0.25f, 0.15f, 0.3f);
->>>>>>> origin/main
 
             var shelfItemSize = new Vector2(230f, 250f);
             CreateKitchenItem(shelf, "SaltJar", kitchen["SaltJar"], roundedSprite, new Vector2(-330f, 1153f), shelfItemSize);
@@ -393,27 +355,8 @@ namespace Witch.EditorTools
             SetReference(effects, "particleSpawnPoint", spawnPoint);
             SetReference(effects, "formulaPopup", popup);
 
-<<<<<<< HEAD
             var discovery = pot.gameObject.AddComponent<RecipeDiscovery>();
             SetReference(discovery, "cauldron", cauldron);
-=======
-            // Discovery, hints and HUD
-            var discovery = cauldronImage.gameObject.AddComponent<RecipeDiscovery>();
-            SetReference(discovery, "cauldron", cauldron);
-
-            var hintTracker = cauldronImage.gameObject.AddComponent<HintTracker>();
-            SetReference(hintTracker, "cauldron", cauldron);
-
-            var hud = hudRect.gameObject.AddComponent<GameHUD>();
-            SetReference(hud, "cauldron", cauldron);
-            SetReference(hud, "discovery", discovery);
-            SetReference(hud, "hintTracker", hintTracker);
-            SetReference(hud, "goalIcon", goalIcon);
-            SetReference(hud, "fallbackIcon", circleSprite);
-            SetReference(hud, "goalLabel", goalText);
-            SetReference(hud, "progressLabel", progressText);
-            SetReference(hud, "hintButton", hintButton);
->>>>>>> origin/main
 
             var hintTracker = pot.gameObject.AddComponent<HintTracker>();
             SetReference(hintTracker, "cauldron", cauldron);
@@ -422,7 +365,6 @@ namespace Witch.EditorTools
             SetReference(loreBook, "discovery", discovery);
             SetObjectList(loreBook, "entries", lore.Cast<Object>().ToList());
 
-<<<<<<< HEAD
             var hud = hudRect.gameObject.AddComponent<GameHUD>();
             SetReference(hud, "cauldron", cauldron);
             SetReference(hud, "discovery", discovery);
@@ -432,11 +374,6 @@ namespace Witch.EditorTools
             SetReference(hud, "goalLabel", goalText);
             SetReference(hud, "progressLabel", progressText);
             SetReference(hud, "hintButton", hintButton);
-=======
-            TextMeshProUGUI instructions = CreateText("Instructions", canvasRect, "Drag the right ingredient into the cauldron!", 40, FontStyles.Italic);
-            Anchor(instructions.rectTransform, new Vector2(0.5f, 0f), new Vector2(0f, 90f), new Vector2(1000f, 80f));
-            instructions.color = new Color(1f, 1f, 1f, 0.7f);
->>>>>>> origin/main
 
             EnsureFolder("Assets/Scenes");
             EditorSceneManager.SaveScene(scene, ScenePath);
@@ -473,7 +410,6 @@ namespace Witch.EditorTools
             captionLabel.textWrappingMode = TextWrappingModes.Normal;
 
             image.gameObject.AddComponent<DraggableItem>();
-<<<<<<< HEAD
 
             var state = image.gameObject.AddComponent<ItemState>();
             var stateSo = new SerializedObject(state);
@@ -535,20 +471,6 @@ namespace Witch.EditorTools
             rect.SetParent(parent, false);
             Stretch(rect);
             return rect;
-=======
-            var ingredient = image.gameObject.AddComponent<IngredientItem>();
-            SetReference(ingredient, "recipe", recipe);
-            SetReference(ingredient, "iconImage", image);
-
-            // Hint glow: a thick yellow outline that IngredientHighlight switches on and pulses.
-            var glow = image.gameObject.AddComponent<Outline>();
-            glow.effectColor = new Color(1f, 0.9f, 0.2f, 1f);
-            glow.effectDistance = new Vector2(12f, -12f);
-            glow.enabled = false;
-
-            var highlight = image.gameObject.AddComponent<IngredientHighlight>();
-            SetReference(highlight, "glow", glow);
->>>>>>> origin/main
         }
 
         private static List<RecipeData> CreateOrLoadSampleRecipes()
