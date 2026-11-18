@@ -93,7 +93,7 @@ namespace Witch.Gameplay
             }
 
             string subtitle = showTechnicalName ? recipe.technicalName : null;
-            string explanation = recipe.KidExplanation;
+            string explanation = recipe.KidExplanationWithSafety;
             if (showReactionEquation && recipe.HasReaction)
             {
                 formulaPopup.Show(recipe.reaction.RichTextEquation, subtitle, explanation);

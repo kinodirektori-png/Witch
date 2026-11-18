@@ -94,6 +94,7 @@ namespace Witch.UI
             AppendLine(body, recipe.KidExplanation);
             AppendLine(body, $"<b>Made from:</b> {DescribeIngredients(recipe, includePrefix: false)}");
             AppendLine(body, string.IsNullOrEmpty(recipe.biologicalSource) ? null : $"<b>Where it comes from:</b> {recipe.biologicalSource}");
+            AppendLine(body, recipe.HasSafetyNote ? $"<b>Safety:</b> {recipe.safetyNote}" : null);
             SetText(bodyLabel, body.ToString());
         }
 

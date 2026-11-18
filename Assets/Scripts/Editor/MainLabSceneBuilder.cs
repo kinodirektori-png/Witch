@@ -127,6 +127,7 @@ namespace Witch.EditorTools
             LinkSampleReactions(recipes);
             recipes = ReloadSampleRecipes(); // fresh, persistent references from disk
             ApplySampleConditions(recipes);
+            ApplySampleSafetyNotes(recipes);
             Dictionary<string, KitchenItemData> kitchen = CreateOrLoadKitchenItems(recipes);
             List<LoreEntryData> lore = CreateOrLoadLoreEntries(recipes, kitchen);
             GameArt.ApplyToData(kitchen, recipes, lore); // sprites from Assets/Art (issue #41)
@@ -1055,6 +1056,33 @@ namespace Witch.EditorTools
             });
 
             AssetDatabase.SaveAssets();
+        }
+
+        /// <summary>
+        /// Kid-facing safety lines for the sample recipes (#22): anything heated, or anything that stings, says so.
+        /// Notes a designer already wrote are left alone.
+        /// </summary>
+        private static void ApplySampleSafetyNotes(List<RecipeData> recipes)
+        {
+            SetSafetyNoteIfEmpty(FindSampleRecipe(recipes, "CitricAcid"),
+                "Lemon juice stings if it gets in your eyes. Wash your hands after squeezing.");
+            SetSafetyNoteIfEmpty(FindSampleRecipe(recipes, "FizzyBubbles"),
+                "Try this fizz at home only with an adult, and keep it away from your eyes.");
+            SetSafetyNoteIfEmpty(FindSampleRecipe(recipes, "WashingSoda"),
+                "Only use the stove or oven with an adult. Washing soda is stronger than baking soda and can sting " +
+                "skin and eyes, so never taste it.");
+            AssetDatabase.SaveAssets();
+        }
+
+        private static void SetSafetyNoteIfEmpty(RecipeData recipe, string note)
+        {
+            if (recipe == null || recipe.HasSafetyNote)
+            {
+                return;
+            }
+
+            recipe.safetyNote = note;
+            EditorUtility.SetDirty(recipe);
         }
 
         private static void SetConditionsIfEmpty(RecipeData recipe, System.Action<BrewConditions> setup)
