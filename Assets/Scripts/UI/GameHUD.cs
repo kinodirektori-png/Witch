@@ -42,6 +42,9 @@ namespace Witch.UI
         [SerializeField] private string allDoneText = "All potions brewed!";
         [SerializeField] private string wrongIngredientText = "Hmm, that's not it. Try another one!";
 
+        [Tooltip("Appended under the goal while a finished mixture waits for water or heat. {0} = the hint.")]
+        [SerializeField] private string waitingFormat = "\n<size=80%>{0}</size>";
+
         [Tooltip("Seconds the wrong-ingredient message stays before the goal comes back.")]
         [SerializeField, Min(0f)] private float feedbackDuration = 1.5f;
 
@@ -168,7 +171,9 @@ namespace Witch.UI
 
         private IEnumerator FeedbackRoutine()
         {
-            SetGoalText(wrongIngredientText);
+            // A specific reason (e.g. "Try squeezing it first!") beats the generic wrong-ingredient text.
+            string reason = cauldron != null ? cauldron.LastRejectHint : null;
+            SetGoalText(string.IsNullOrEmpty(reason) ? wrongIngredientText : reason);
             yield return new WaitForSecondsRealtime(feedbackDuration);
             feedbackRoutine = null;
             ShowGoal();
@@ -204,6 +209,11 @@ namespace Witch.UI
                     ? needed - cauldron.GetMissingIngredients(recipe).Count
                     : 0;
                 text += string.Format(ingredientProgressFormat, added, needed);
+            }
+
+            if (cauldron.PendingRecipe != null && !string.IsNullOrEmpty(cauldron.PendingHint) && !string.IsNullOrEmpty(waitingFormat))
+            {
+                text += string.Format(waitingFormat, cauldron.PendingHint);
             }
 
             SetGoalText(text);

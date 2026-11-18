@@ -36,6 +36,27 @@ namespace Witch.Data
                  "(each reactant dropped in as many times as its coefficient), and the popup shows its equation.")]
         public ReactionData reaction;
 
+        [Tooltip("Extra conditions on top of the ingredients: the form each ingredient must be in (juice, not a whole " +
+                 "lemon), water, heat, strength, and what kids see when it happens.")]
+        public BrewConditions conditions = new BrewConditions();
+
+        /// <summary>
+        /// The kid explanation for the popup: the reaction's explanation if there is one, else "what you see".
+        /// </summary>
+        public string KidExplanation
+        {
+            get
+            {
+                string fromReaction = reaction != null ? reaction.kidExplanation : null;
+                if (!string.IsNullOrEmpty(fromReaction))
+                {
+                    return fromReaction;
+                }
+
+                return conditions != null ? conditions.whatYouSee : string.Empty;
+            }
+        }
+
         /// <summary>True if this recipe is made by a <see cref="ReactionData"/> with at least one reactant.</summary>
         public bool HasReaction => reaction != null && reaction.GetIngredientSequence().Count > 0;
 
@@ -99,6 +120,11 @@ namespace Witch.Data
             technicalName = technicalName?.Trim();
             chemicalFormula = chemicalFormula?.Trim();
             biologicalSource = biologicalSource?.Trim();
+
+            if (conditions != null)
+            {
+                conditions.whatYouSee = conditions.whatYouSee?.Trim();
+            }
 
             if (reaction != null && ingredients != null && ingredients.Exists(ingredient => ingredient != null))
             {
