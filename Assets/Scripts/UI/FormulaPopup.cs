@@ -5,8 +5,9 @@ using UnityEngine;
 namespace Witch.UI
 {
     /// <summary>
-    /// Temporary popup that floats up and fades out, used to show the chemical formula of a brewed potion.
-    /// Does not block touches so the player can keep dragging ingredients while it is visible.
+    /// Temporary popup that floats up and fades out, used to show the chemical formula of a brewed potion, or a
+    /// reaction's balanced equation with a one-sentence explanation. Does not block touches so the player can keep
+    /// dragging ingredients while it is visible.
     /// </summary>
     [RequireComponent(typeof(RectTransform))]
     [RequireComponent(typeof(CanvasGroup))]
@@ -17,9 +18,15 @@ namespace Witch.UI
         [Tooltip("Optional second line, e.g. \"Sodium Chloride\".")]
         [SerializeField] private TMP_Text subtitleLabel;
 
+        [Tooltip("Optional third line for a kid-friendly explanation of a reaction. Hidden when there is none.")]
+        [SerializeField] private TMP_Text explanationLabel;
+
         [Header("Animation")]
         [SerializeField, Min(0f)] private float fadeInDuration = 0.15f;
         [SerializeField, Min(0f)] private float holdDuration = 1.5f;
+
+        [Tooltip("Hold time used instead when an explanation is shown, so young readers have time to read it.")]
+        [SerializeField, Min(0f)] private float holdDurationWithExplanation = 5f;
         [SerializeField, Min(0f)] private float fadeOutDuration = 0.5f;
 
         [Tooltip("How far the popup rises (in canvas units) over its lifetime.")]
@@ -32,6 +39,7 @@ namespace Witch.UI
         private CanvasGroup canvasGroup;
         private Vector2 restingPosition;
         private Coroutine showRoutine;
+        private float currentHoldDuration;
 
         private void Awake()
         {
@@ -44,20 +52,20 @@ namespace Witch.UI
             canvasGroup.interactable = false;
         }
 
-        /// <summary>Shows the popup. <paramref name="formula"/> may contain TMP rich text such as &lt;sub&gt;.</summary>
-        public void Show(string formula, string subtitle = null)
+        /// <summary>
+        /// Shows the popup. <paramref name="formula"/> may contain TMP rich text such as &lt;sub&gt;; pass a reaction's
+        /// equation there too. <paramref name="explanation"/> is an optional sentence shown underneath.
+        /// </summary>
+        public void Show(string formula, string subtitle = null, string explanation = null)
         {
             if (formulaLabel != null)
             {
                 formulaLabel.text = formula;
             }
 
-            if (subtitleLabel != null)
-            {
-                bool hasSubtitle = !string.IsNullOrEmpty(subtitle);
-                subtitleLabel.gameObject.SetActive(hasSubtitle);
-                subtitleLabel.text = hasSubtitle ? subtitle : string.Empty;
-            }
+            SetOptionalText(subtitleLabel, subtitle);
+            bool showsExplanation = SetOptionalText(explanationLabel, explanation);
+            currentHoldDuration = showsExplanation ? Mathf.Max(holdDuration, holdDurationWithExplanation) : holdDuration;
 
             if (!gameObject.activeSelf)
             {
@@ -74,7 +82,7 @@ namespace Witch.UI
 
         private IEnumerator ShowRoutine()
         {
-            float total = fadeInDuration + holdDuration + fadeOutDuration;
+            float total = fadeInDuration + currentHoldDuration + fadeOutDuration;
             float elapsed = 0f;
 
             while (elapsed < total)
@@ -88,14 +96,14 @@ namespace Witch.UI
                     canvasGroup.alpha = t;
                     rectTransform.localScale = Vector3.one * Mathf.Lerp(startScale, 1f, 1f - (1f - t) * (1f - t));
                 }
-                else if (elapsed < fadeInDuration + holdDuration)
+                else if (elapsed < fadeInDuration + currentHoldDuration)
                 {
                     canvasGroup.alpha = 1f;
                     rectTransform.localScale = Vector3.one;
                 }
                 else
                 {
-                    float t = fadeOutDuration > 0f ? (elapsed - fadeInDuration - holdDuration) / fadeOutDuration : 1f;
+                    float t = fadeOutDuration > 0f ? (elapsed - fadeInDuration - currentHoldDuration) / fadeOutDuration : 1f;
                     canvasGroup.alpha = 1f - t;
                 }
 
@@ -107,6 +115,20 @@ namespace Witch.UI
             rectTransform.anchoredPosition = restingPosition;
             rectTransform.localScale = Vector3.one;
             showRoutine = null;
+        }
+
+        /// <summary>Sets the label's text and hides it when empty. Returns true if it is shown.</summary>
+        private static bool SetOptionalText(TMP_Text label, string text)
+        {
+            if (label == null)
+            {
+                return false;
+            }
+
+            bool hasText = !string.IsNullOrEmpty(text);
+            label.gameObject.SetActive(hasText);
+            label.text = hasText ? text : string.Empty;
+            return hasText;
         }
     }
 }

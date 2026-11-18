@@ -24,6 +24,8 @@ namespace Witch.EditorTools
         private const string MenuPath = "Witch/Build MainLab Test Scene";
         private const string ScenePath = "Assets/Scenes/MainLab.unity";
         private const string RecipeFolder = "Assets/Data/Recipes";
+        private const string ReactionFolder = "Assets/Data/Reactions";
+        private const string FizzReactionName = "BakingSodaCitricAcid";
         private const string PrefabFolder = "Assets/Prefabs";
         private const string ParticlePrefabPath = PrefabFolder + "/ReactionBubbles.prefab";
 
@@ -41,8 +43,11 @@ namespace Witch.EditorTools
             /// <summary>Asset names of the ingredients that combine into this recipe. Null for a basic ingredient.</summary>
             public string[] Ingredients;
 
+            /// <summary>Asset name of the <see cref="ReactionData"/> that makes this recipe. Null if none.</summary>
+            public string Reaction;
+
             /// <summary>Basic ingredients get a draggable item on the shelf; combination results don't.</summary>
-            public bool OnShelf => Ingredients == null || Ingredients.Length == 0;
+            public bool OnShelf => (Ingredients == null || Ingredients.Length == 0) && string.IsNullOrEmpty(Reaction);
         }
 
         // Real substances kids can find around them; formulas are accurate.
@@ -63,13 +68,13 @@ namespace Witch.EditorTools
                 AssetName = "BakingSoda", CommonName = "Baking Soda", TechnicalName = "Sodium Bicarbonate",
                 Formula = "NaHCO3", Source = "Nahcolite mineral / Mineral springs", Color = new Color(0.62f, 0.85f, 1f),
             },
-            // Multi-ingredient sample: 3 NaHCO3 + C6H8O7 -> Na3C6H5O7 + 3 CO2 + 3 H2O. The fizz kids see is the CO2.
-            // Drop Citric Acid once and Baking Soda three times, in any order.
+            // Two-ingredient reaction: 3 NaHCO3 + C6H8O7 -> Na3C6H5O7 + 3 CO2 + 3 H2O. The fizz kids see is the CO2.
+            // Drop Citric Acid once and Baking Soda three times, in any order (see CreateOrLoadFizzReaction).
             new SampleRecipe
             {
                 AssetName = "FizzyBubbles", CommonName = "Fizzy Bubbles", TechnicalName = "Carbon Dioxide",
                 Formula = "CO2", Source = "Made when baking soda meets citric acid", Color = new Color(0.8f, 0.95f, 1f),
-                Ingredients = new[] { "CitricAcid", "BakingSoda", "BakingSoda", "BakingSoda" },
+                Reaction = FizzReactionName,
             },
         };
 
@@ -95,6 +100,7 @@ namespace Witch.EditorTools
             }
 
             List<RecipeData> recipes = CreateOrLoadSampleRecipes();
+            LinkSampleReactions(recipes);
             ParticleSystem particlePrefab = CreateOrLoadParticlePrefab();
 
             Scene scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
@@ -158,19 +164,40 @@ namespace Witch.EditorTools
             // Formula popup
             var popupRect = new GameObject("FormulaPopup", typeof(RectTransform)).GetComponent<RectTransform>();
             popupRect.SetParent(canvasRect, false);
-            Anchor(popupRect, new Vector2(0.5f, 0.5f), new Vector2(0f, 500f), new Vector2(900f, 260f));
+            Anchor(popupRect, new Vector2(0.5f, 0.5f), new Vector2(0f, 540f), new Vector2(980f, 440f));
             var popup = popupRect.gameObject.AddComponent<FormulaPopup>();
             popupRect.GetComponent<CanvasGroup>().alpha = 0f; // hidden until a reaction happens
 
-            TextMeshProUGUI formulaText = CreateText("Formula", popupRect, "NaCl", 120, FontStyles.Bold);
-            Anchor(formulaText.rectTransform, new Vector2(0.5f, 1f), new Vector2(0f, -80f), new Vector2(900f, 160f));
-            formulaText.color = new Color(0.55f, 1f, 0.65f);
+            // Dark backing so long equations and explanations stay readable over the scene.
+            Image popupBacking = CreateImage("Backing", popupRect, roundedSprite, new Color(0.08f, 0.05f, 0.12f, 0.85f));
+            popupBacking.type = Image.Type.Sliced;
+            popupBacking.raycastTarget = false;
+            Stretch(popupBacking.rectTransform);
 
-            TextMeshProUGUI subtitleText = CreateText("TechnicalName", popupRect, "Sodium Chloride", 48, FontStyles.Normal);
-            Anchor(subtitleText.rectTransform, new Vector2(0.5f, 0f), new Vector2(0f, 40f), new Vector2(900f, 70f));
+            // Auto-sizes so a single formula ("NaCl") is big and a full equation still fits on two lines.
+            TextMeshProUGUI formulaText = CreateText("Formula", popupRect, "NaCl", 110, FontStyles.Bold);
+            Anchor(formulaText.rectTransform, new Vector2(0.5f, 1f), new Vector2(0f, -105f), new Vector2(920f, 180f));
+            formulaText.color = new Color(0.55f, 1f, 0.65f);
+            formulaText.textWrappingMode = TextWrappingModes.Normal;
+            formulaText.enableAutoSizing = true;
+            formulaText.fontSizeMin = 40f;
+            formulaText.fontSizeMax = 110f;
+
+            TextMeshProUGUI subtitleText = CreateText("TechnicalName", popupRect, "Sodium Chloride", 44, FontStyles.Normal);
+            Anchor(subtitleText.rectTransform, new Vector2(0.5f, 1f), new Vector2(0f, -230f), new Vector2(920f, 60f));
+
+            TextMeshProUGUI explanationText = CreateText("Explanation", popupRect, "", 38, FontStyles.Normal);
+            Anchor(explanationText.rectTransform, new Vector2(0.5f, 0f), new Vector2(0f, 80f), new Vector2(900f, 140f));
+            explanationText.color = new Color(1f, 0.95f, 0.8f);
+            explanationText.textWrappingMode = TextWrappingModes.Normal;
+            explanationText.enableAutoSizing = true;
+            explanationText.fontSizeMin = 28f;
+            explanationText.fontSizeMax = 38f;
+            explanationText.gameObject.SetActive(false);
 
             SetReference(popup, "formulaLabel", formulaText);
             SetReference(popup, "subtitleLabel", subtitleText);
+            SetReference(popup, "explanationLabel", explanationText);
 
             // Effects controller
             var effects = cauldronImage.gameObject.AddComponent<ParticleEffectController>();
@@ -280,6 +307,72 @@ namespace Witch.EditorTools
 
             AssetDatabase.SaveAssets();
             return result;
+        }
+
+        /// <summary>
+        /// Creates (or loads) each sample reaction and links it to its recipe. A recipe that already has a reaction is
+        /// left alone; one that gets a reaction here has its old Ingredients list cleared, since the reaction replaces it.
+        /// </summary>
+        private static void LinkSampleReactions(List<RecipeData> recipes)
+        {
+            for (int i = 0; i < SampleRecipes.Length; i++)
+            {
+                if (SampleRecipes[i].Reaction != FizzReactionName || recipes[i].reaction != null)
+                {
+                    continue;
+                }
+
+                recipes[i].reaction = CreateOrLoadFizzReaction(recipes);
+                recipes[i].ingredients?.Clear();
+                EditorUtility.SetDirty(recipes[i]);
+            }
+
+            AssetDatabase.SaveAssets();
+        }
+
+        /// <summary>3 NaHCO3 + C6H8O7 -> Na3C6H5O7 + 3 CO2 + 3 H2O (baking soda + citric acid, fizzing CO2).</summary>
+        private static ReactionData CreateOrLoadFizzReaction(List<RecipeData> recipes)
+        {
+            string path = $"{ReactionFolder}/{FizzReactionName}.asset";
+            var reaction = AssetDatabase.LoadAssetAtPath<ReactionData>(path);
+            if (reaction != null)
+            {
+                return reaction;
+            }
+
+            EnsureFolder(ReactionFolder);
+            RecipeData bakingSoda = FindSampleRecipe(recipes, "BakingSoda");
+            RecipeData citricAcid = FindSampleRecipe(recipes, "CitricAcid");
+
+            reaction = ScriptableObject.CreateInstance<ReactionData>();
+            reaction.reactants = new List<ReactionData.Term>
+            {
+                new ReactionData.Term(3, bakingSoda),
+                new ReactionData.Term(1, citricAcid),
+            };
+            reaction.products = new List<ReactionData.Term>
+            {
+                new ReactionData.Term(1, "Na3C6H5O7", "Sodium Citrate"),
+                new ReactionData.Term(3, "CO2", "Carbon Dioxide"),
+                new ReactionData.Term(3, "H2O", "Water"),
+            };
+            reaction.reactantsInOrder = false;
+            reaction.kidExplanation = "Citric acid breaks baking soda apart, which lets out carbon dioxide gas, " +
+                                      "and that gas makes all the fizzy bubbles!";
+
+            if (!reaction.IsBalanced(out string problem))
+            {
+                Debug.LogError($"MainLabSceneBuilder: sample reaction is not balanced. {problem}");
+            }
+
+            AssetDatabase.CreateAsset(reaction, path);
+            return reaction;
+        }
+
+        private static RecipeData FindSampleRecipe(List<RecipeData> recipes, string assetName)
+        {
+            int index = System.Array.FindIndex(SampleRecipes, s => s.AssetName == assetName);
+            return index >= 0 ? recipes[index] : null;
         }
 
         private static ParticleSystem CreateOrLoadParticlePrefab()
