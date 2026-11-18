@@ -125,9 +125,41 @@ namespace Witch.EditorTools
             TextMeshProUGUI title = CreateText("Title", canvasRect, "The Witch's Lab", 84, FontStyles.Bold);
             Anchor(title.rectTransform, new Vector2(0.5f, 1f), new Vector2(0f, -140f), new Vector2(1000f, 120f));
 
-            TextMeshProUGUI goalText = CreateText("RecipeGoal", canvasRect, "Brew: ...", 56, FontStyles.Normal);
-            Anchor(goalText.rectTransform, new Vector2(0.5f, 1f), new Vector2(0f, -260f), new Vector2(1000f, 100f));
+            // HUD: goal icon + text on the left, hint button on the right, "recipes found" underneath.
+            var hudRect = new GameObject("HUD", typeof(RectTransform)).GetComponent<RectTransform>();
+            hudRect.SetParent(canvasRect, false);
+            Stretch(hudRect);
+
+            Image goalIcon = CreateImage("GoalIcon", hudRect, circleSprite, Color.white);
+            Anchor(goalIcon.rectTransform, new Vector2(0.5f, 1f), new Vector2(-380f, -270f), new Vector2(100f, 100f));
+            goalIcon.raycastTarget = false;
+            goalIcon.preserveAspect = true;
+
+            TextMeshProUGUI goalText = CreateText("GoalText", hudRect, "Brew: ...", 56, FontStyles.Normal);
+            Anchor(goalText.rectTransform, new Vector2(0.5f, 1f), new Vector2(5f, -270f), new Vector2(650f, 120f));
+            goalText.alignment = TextAlignmentOptions.MidlineLeft;
             goalText.color = new Color(1f, 0.9f, 0.6f);
+            goalText.textWrappingMode = TextWrappingModes.Normal;
+            goalText.enableAutoSizing = true;
+            goalText.fontSizeMin = 32f;
+            goalText.fontSizeMax = 56f;
+
+            TextMeshProUGUI progressText = CreateText("RecipesFound", hudRect, "Recipes found: 0 / 0", 40, FontStyles.Normal);
+            Anchor(progressText.rectTransform, new Vector2(0.5f, 1f), new Vector2(0f, -370f), new Vector2(900f, 60f));
+            progressText.color = new Color(1f, 1f, 1f, 0.75f);
+
+            // 150 canvas units is about 50 pt on an iPhone, above the 44 pt minimum touch target.
+            Image hintImage = CreateImage("HintButton", hudRect, circleSprite, new Color(1f, 0.82f, 0.3f));
+            Anchor(hintImage.rectTransform, new Vector2(1f, 1f), new Vector2(-100f, -270f), new Vector2(150f, 150f));
+            hintImage.raycastTarget = true; // the button needs it to receive taps
+            var hintButton = hintImage.gameObject.AddComponent<Button>();
+            hintButton.targetGraphic = hintImage;
+            hintButton.navigation = new Navigation { mode = Navigation.Mode.None };
+            hintImage.gameObject.AddComponent<CanvasGroup>().alpha = 0f; // GameHUD shows it after wrong tries
+
+            TextMeshProUGUI hintLabel = CreateText("Label", hintImage.rectTransform, "Hint", 40, FontStyles.Bold);
+            Stretch(hintLabel.rectTransform);
+            hintLabel.color = new Color(0.25f, 0.15f, 0.3f);
 
             // Cauldron
             Image cauldronImage = CreateImage("Cauldron", canvasRect, circleSprite, new Color(0.12f, 0.12f, 0.14f));
@@ -209,10 +241,22 @@ namespace Witch.EditorTools
             SetReference(effects, "particleSpawnPoint", spawnPoint);
             SetReference(effects, "formulaPopup", popup);
 
-            // Goal label
-            var goal = goalText.gameObject.AddComponent<RecipeGoalLabel>();
-            SetReference(goal, "cauldron", cauldron);
-            SetReference(goal, "label", goalText);
+            // Discovery, hints and HUD
+            var discovery = cauldronImage.gameObject.AddComponent<RecipeDiscovery>();
+            SetReference(discovery, "cauldron", cauldron);
+
+            var hintTracker = cauldronImage.gameObject.AddComponent<HintTracker>();
+            SetReference(hintTracker, "cauldron", cauldron);
+
+            var hud = hudRect.gameObject.AddComponent<GameHUD>();
+            SetReference(hud, "cauldron", cauldron);
+            SetReference(hud, "discovery", discovery);
+            SetReference(hud, "hintTracker", hintTracker);
+            SetReference(hud, "goalIcon", goalIcon);
+            SetReference(hud, "fallbackIcon", circleSprite);
+            SetReference(hud, "goalLabel", goalText);
+            SetReference(hud, "progressLabel", progressText);
+            SetReference(hud, "hintButton", hintButton);
 
             // Shelf with ingredients
             Image shelf = CreateImage("Shelf", canvasRect, roundedSprite, new Color(0.42f, 0.27f, 0.16f));
@@ -235,9 +279,9 @@ namespace Witch.EditorTools
                     new Vector2(startX + spacing * slot, 0f));
             }
 
-            TextMeshProUGUI hint = CreateText("Hint", canvasRect, "Drag the right ingredient into the cauldron!", 40, FontStyles.Italic);
-            Anchor(hint.rectTransform, new Vector2(0.5f, 0f), new Vector2(0f, 90f), new Vector2(1000f, 80f));
-            hint.color = new Color(1f, 1f, 1f, 0.7f);
+            TextMeshProUGUI instructions = CreateText("Instructions", canvasRect, "Drag the right ingredient into the cauldron!", 40, FontStyles.Italic);
+            Anchor(instructions.rectTransform, new Vector2(0.5f, 0f), new Vector2(0f, 90f), new Vector2(1000f, 80f));
+            instructions.color = new Color(1f, 1f, 1f, 0.7f);
 
             EnsureFolder("Assets/Scenes");
             EditorSceneManager.SaveScene(scene, ScenePath);
@@ -267,6 +311,15 @@ namespace Witch.EditorTools
             var ingredient = image.gameObject.AddComponent<IngredientItem>();
             SetReference(ingredient, "recipe", recipe);
             SetReference(ingredient, "iconImage", image);
+
+            // Hint glow: a thick yellow outline that IngredientHighlight switches on and pulses.
+            var glow = image.gameObject.AddComponent<Outline>();
+            glow.effectColor = new Color(1f, 0.9f, 0.2f, 1f);
+            glow.effectDistance = new Vector2(12f, -12f);
+            glow.enabled = false;
+
+            var highlight = image.gameObject.AddComponent<IngredientHighlight>();
+            SetReference(highlight, "glow", glow);
         }
 
         private static List<RecipeData> CreateOrLoadSampleRecipes()
