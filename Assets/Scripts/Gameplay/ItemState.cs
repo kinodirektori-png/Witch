@@ -45,6 +45,8 @@ namespace Witch.Gameplay
         public event Action<ItemState> Changed;
 
         private Sprite defaultSprite;
+        private Image.Type defaultImageType;
+        private bool defaultPreserveAspect;
         private bool initialised;
 
         /// <summary>What the item holds now, or null if it is empty.</summary>
@@ -103,7 +105,13 @@ namespace Witch.Gameplay
                 image = GetComponent<Image>();
             }
 
-            defaultSprite = image != null ? image.sprite : null;
+            if (image != null)
+            {
+                defaultSprite = image.sprite;
+                defaultImageType = image.type;
+                defaultPreserveAspect = image.preserveAspect;
+            }
+
             SetContents(startContents, startContents != null ? startContents.startState : PhysicalState.Solid, notify: false);
         }
 
@@ -197,22 +205,47 @@ namespace Witch.Gameplay
 
             if (Contents == null)
             {
-                image.sprite = defaultSprite;
-                image.color = emptyColor;
+                ShowSprite(null, emptyColor);
                 return;
             }
 
             if (IsSqueezed)
             {
-                bool hasSqueezedArt = Contents.squeezedSprite != null;
-                image.sprite = hasSqueezedArt ? Contents.squeezedSprite : (Contents.shelfSprite != null ? Contents.shelfSprite : defaultSprite);
-                image.color = hasSqueezedArt ? Color.white : Color.Lerp(Contents.placeholderColor, new Color(0.45f, 0.4f, 0.3f), 0.55f);
+                if (Contents.squeezedSprite != null)
+                {
+                    ShowSprite(Contents.squeezedSprite, Color.white);
+                }
+                else
+                {
+                    // No squeezed art yet: darken the fresh art (or the placeholder card) instead.
+                    Color dull = Color.Lerp(Contents.placeholderColor, new Color(0.45f, 0.4f, 0.3f), 0.55f);
+                    ShowSprite(Contents.shelfSprite, Contents.shelfSprite != null ? new Color(0.7f, 0.65f, 0.55f) : dull);
+                }
+
                 return;
             }
 
-            bool hasArt = Contents.shelfSprite != null;
-            image.sprite = hasArt ? Contents.shelfSprite : defaultSprite;
-            image.color = hasArt ? Color.white : Contents.placeholderColor;
+            ShowSprite(Contents.shelfSprite, Contents.shelfSprite != null ? Color.white : Contents.placeholderColor);
+        }
+
+        /// <summary>
+        /// Shows ingredient art as-is (simple, keeping its proportions), or the placeholder card when
+        /// <paramref name="art"/> is null.
+        /// </summary>
+        private void ShowSprite(Sprite art, Color color)
+        {
+            image.color = color;
+            if (art == null)
+            {
+                image.sprite = defaultSprite;
+                image.type = defaultImageType;
+                image.preserveAspect = defaultPreserveAspect;
+                return;
+            }
+
+            image.sprite = art;
+            image.type = Image.Type.Simple;
+            image.preserveAspect = true;
         }
 
         private string GetCaption()
